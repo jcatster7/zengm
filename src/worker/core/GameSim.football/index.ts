@@ -30,6 +30,11 @@ import LngTracker from "./LngTracker.ts";
 import GameSimBase from "../GameSim/GameSimBase.ts";
 import { PHASE, STARTING_NUM_TIMEOUTS } from "../../../common/constants.ts";
 import type { TeamNum } from "../../../common/types.ts";
+import type {
+	FootballCoachDecision,
+	FootballCoachPlay,
+	FootballCoachSnapshot,
+} from "../../../common/footballCoach.ts";
 import {
 	choice,
 	randInt,
@@ -38,6 +43,22 @@ import {
 } from "../../../common/random.ts";
 
 const teamNums: [TeamNum, TeamNum] = [0, 1];
+
+type CoachPause = {
+	stage: FootballCoachSnapshot["stage"];
+	clock?: number;
+};
+
+// A normal simulation drains the same steps without waiting or changing decisions.
+const runAutomatically = <T>(
+	steps: Generator<CoachPause, T, FootballCoachDecision | undefined>,
+): T => {
+	let step = steps.next();
+	while (!step.done) {
+		step = steps.next(undefined);
+	}
+	return step.value;
+};
 
 const FIELD_GOAL_DISTANCE_YARDS_ADDED_FROM_SCRIMMAGE = 17;
 
@@ -265,20 +286,53 @@ class GameSim extends GameSimBase {
 	}
 
 	run() {
+		return runAutomatically(this.runSteps());
+	}
+
+	async runInteractive(
+		choose: (
+			snapshot: FootballCoachSnapshot,
+		) =>
+			| FootballCoachDecision
+			| undefined
+			| Promise<FootballCoachDecision | undefined>,
+	) {
+		const steps = this.runSteps();
+		let step = steps.next();
+		while (!step.done) {
+			const snapshot = this.getCoachSnapshot(
+				step.value.stage,
+				step.value.clock,
+			);
+			const decision = await choose(snapshot);
+			this.validateCoachDecision(decision, snapshot);
+			step = steps.next(decision);
+		}
+		return step.value;
+	}
+
+	private *runSteps(): Generator<
+		CoachPause,
+		ReturnType<GameSim["finish"]>,
+		FootballCoachDecision | undefined
+	> {
 		// Simulate the game up to the end of regulation
-		this.simRegulation();
+		yield* this.simRegulationSteps();
 
 		let numOvertimes = 0;
 		while (
 			this.team[0].stat.pts === this.team[1].stat.pts &&
 			numOvertimes < this.maxOvertimes
 		) {
-			this.simOvertime();
+			yield* this.simOvertimeSteps();
 			numOvertimes += 1;
 		}
 
 		this.doShootout();
+		return this.finish();
+	}
 
+	private finish() {
 		this.playByPlay.logEvent({
 			type: "gameOver",
 			clock: this.clock,
@@ -438,6 +492,14 @@ class GameSim extends GameSimBase {
 	}
 
 	simRegulation() {
+		return runAutomatically(this.simRegulationSteps());
+	}
+
+	private *simRegulationSteps(): Generator<
+		CoachPause,
+		void,
+		FootballCoachDecision | undefined
+	> {
 		let quarter = 1;
 
 		while (true) {
@@ -446,7 +508,7 @@ class GameSim extends GameSimBase {
 				this.awaitingAfterTouchdown ||
 				this.playUntimedPossession
 			) {
-				this.simPlay();
+				yield* this.simPlaySteps();
 			}
 
 			// Who gets the ball after halftime?
@@ -479,6 +541,14 @@ class GameSim extends GameSimBase {
 	}
 
 	simOvertime() {
+		return runAutomatically(this.simOvertimeSteps());
+	}
+
+	private *simOvertimeSteps(): Generator<
+		CoachPause,
+		void,
+		FootballCoachDecision | undefined
+	> {
 		this.clock = this.getOvertimeLength();
 
 		this.overtime = true;
@@ -516,7 +586,7 @@ class GameSim extends GameSimBase {
 			(this.clock > 0 || this.playUntimedPossession) &&
 			this.overtimeState !== "over"
 		) {
-			this.simPlay();
+			yield* this.simPlaySteps();
 		}
 	}
 
@@ -929,11 +999,116 @@ class GameSim extends GameSimBase {
 		return "run";
 	}
 
+	getAllowedCoachPlays(): FootballCoachPlay[] {
+		if (this.awaitingKickoff !== undefined) {
+			return this.awaitingAfterSafety ? ["kickoff"] : ["kickoff", "onsideKick"];
+		}
+		if (this.awaitingAfterTouchdown) {
+			return g.get("twoPointConversions")
+				? ["extraPoint", "twoPointConversion"]
+				: ["extraPoint"];
+		}
+		return ["run", "pass", "kneel", "punt", "fieldGoal"];
+	}
+
+	getCoachSnapshot(
+		stage: FootballCoachSnapshot["stage"],
+		clock = this.clock,
+	): FootballCoachSnapshot {
+		const players = (t: TeamNum) =>
+			Object.values(this.playersOnField[t]).flatMap((atPosition) =>
+				atPosition.map((p) => ({ id: p.id, name: p.name, pos: p.pos })),
+			);
+		return {
+			gid: this.id,
+			stage,
+			quarter: this.team[0].stat.ptsQtrs.length,
+			numPeriods: this.numPeriods,
+			clock: Math.max(0, clock),
+			down: this.down,
+			toGo: this.toGo,
+			scrimmage: this.scrimmage,
+			offense: this.o,
+			defense: this.d,
+			teams: [
+				{
+					id: this.team[0].id,
+					pts: this.team[0].stat.pts,
+					sPts: this.team[0].stat.sPts,
+				},
+				{
+					id: this.team[1].id,
+					pts: this.team[1].stat.pts,
+					sPts: this.team[1].stat.sPts,
+				},
+			],
+			timeouts: [...this.timeouts],
+			canTimeout: [
+				stage === "clock" && this.isClockRunning && this.timeouts[0] > 0,
+				stage === "clock" && this.isClockRunning && this.timeouts[1] > 0,
+			],
+			awaitingKickoff: this.awaitingKickoff,
+			awaitingAfterTouchdown: this.awaitingAfterTouchdown,
+			isClockRunning: this.isClockRunning,
+			allowedPlays: stage === "play" ? this.getAllowedCoachPlays() : [],
+			events: helpers.deepCopy(
+				this.playByPlay.playByPlay
+					.filter((event) => event.type !== "stat" && event.type !== "init")
+					.slice(-80),
+			),
+			playersOnField: [players(0), players(1)],
+		};
+	}
+
+	validateCoachDecision(
+		decision: FootballCoachDecision | undefined,
+		snapshot: FootballCoachSnapshot,
+	) {
+		if (decision === undefined) {
+			return;
+		}
+		if (snapshot.stage === "play") {
+			if (
+				decision.timeout !== undefined ||
+				decision.tempo !== undefined ||
+				(decision.play !== undefined &&
+					decision.play !== "auto" &&
+					!snapshot.allowedPlays.includes(decision.play))
+			) {
+				throw new Error("That play is not available in the current situation.");
+			}
+		} else if (
+			decision.play !== undefined ||
+			(decision.timeout !== undefined &&
+				((decision.timeout !== 0 && decision.timeout !== 1) ||
+					!snapshot.canTimeout[decision.timeout])) ||
+			(decision.tempo !== undefined &&
+				!["normal", "hurryUp", "chewClock"].includes(decision.tempo))
+		) {
+			throw new Error(
+				"That clock decision is not available in the current situation.",
+			);
+		}
+	}
+
 	simPlay() {
+		return runAutomatically(this.simPlaySteps());
+	}
+
+	private *simPlaySteps(): Generator<
+		CoachPause,
+		void,
+		FootballCoachDecision | undefined
+	> {
+		const decision = yield { stage: "play" };
 		// Reset before calling Play, so Play can set to true if necessary for the next play
 		this.playUntimedPossession = false;
 
-		const playType = this.getPlayType();
+		const playType =
+			decision?.play && decision.play !== "auto"
+				? decision.play
+				: this.getPlayType();
+		const manualKneel = decision?.play === "kneel";
 
 		// Set these before creating a new Play so they are updated in there too
 		if (playType === "extraPoint") {
@@ -1008,7 +1183,7 @@ class GameSim extends GameSimBase {
 			}
 			dt = this.doRun();
 		} else if (playType === "kneel") {
-			dt = this.doKneel();
+			dt = this.doKneel(manualKneel);
 		} else {
 			throw new Error(`Unknown playType "${playType}"`);
 		}
@@ -1041,7 +1216,25 @@ class GameSim extends GameSimBase {
 			twoMinuteWarningHappening = true;
 		}
 
-		if (clockAtEndOfPlay > 0 && !twoMinuteWarningHappening) {
+		// Pause after resolving the snap, before either team spends a timeout or
+		// the native between-play clock runoff is applied.
+		let clockDecision: FootballCoachDecision | undefined;
+		if (
+			clockAtEndOfPlay > 0 &&
+			!twoMinuteWarningHappening &&
+			this.isClockRunning
+		) {
+			clockDecision = yield { stage: "clock", clock: clockAtEndOfPlay };
+		}
+		if (clockDecision?.timeout !== undefined) {
+			this.doTimeout(clockDecision.timeout, true, clockAtEndOfPlay);
+		}
+
+		if (
+			clockDecision === undefined &&
+			clockAtEndOfPlay > 0 &&
+			!twoMinuteWarningHappening
+		) {
 			// Timeouts - small chance at any time
 			if (Math.random() < 0.01) {
 				this.doTimeout(this.o, false);
@@ -1082,7 +1275,15 @@ class GameSim extends GameSimBase {
 		let dtClockRunning = 0;
 
 		if (this.isClockRunning) {
-			if (this.hurryUp()) {
+			if (
+				clockDecision?.tempo === "chewClock" ||
+				(manualKneel && clockDecision?.tempo !== "hurryUp")
+			) {
+				dtClockRunning = 40 / 60;
+			} else if (
+				clockDecision?.tempo === "hurryUp" ||
+				(clockDecision?.tempo === undefined && this.hurryUp())
+			) {
 				dtClockRunning = randInt(5, 13) / 60;
 
 				// Leave some time for a FG attempt!
@@ -1349,7 +1550,7 @@ class GameSim extends GameSimBase {
 		this.updateTeamCompositeRatings();
 	}
 
-	doTimeout(t: TeamNum, toStopClock: boolean) {
+	doTimeout(t: TeamNum, toStopClock: boolean, clock = this.clock) {
 		if (this.timeouts[t] <= 0) {
 			return;
 		}
@@ -1359,7 +1560,7 @@ class GameSim extends GameSimBase {
 		this.isClockRunning = false;
 		this.playByPlay.logEvent({
 			type: "timeout",
-			clock: this.clock,
+			clock,
 			offense: t === this.o,
 			numLeft: this.timeouts[t],
 			t,
@@ -2625,7 +2826,7 @@ class GameSim extends GameSimBase {
 		return dt;
 	}
 
-	doKneel() {
+	doKneel(separateRunoff = false) {
 		const o = this.o;
 
 		this.updatePlayersOnField("run");
@@ -2647,6 +2848,14 @@ class GameSim extends GameSimBase {
 			t: o,
 			yds,
 		});
+
+		if (separateRunoff) {
+			// The native automatic kneel bundles its runoff into the play duration.
+			// For a coach-selected kneel, leave that time available for a timeout.
+			// Play.commit still stops the clock if this turns the ball over on downs.
+			this.currentPlay.state.current.isClockRunning = true;
+			return ESTIMATED_SECONDS_PER_KNEEL_TIMEOUT;
+		}
 
 		const dt = randInt(
 			ESTIMATED_SECONDS_PER_KNEEL - 1,

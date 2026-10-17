@@ -3,6 +3,8 @@ import toUI from "./toUI.ts";
 import type { Locks } from "../../common/types.ts";
 import helpers from "./helpers.ts";
 import local from "./local.ts";
+import g from "./g.ts";
+import { footballCoach } from "../core/game/footballCoach.ts";
 
 // These are transient variables that always reset to "false" on reload. See local.js for more.
 const locks: Locks = {
@@ -143,6 +145,9 @@ const set = async (name: keyof Locks, value: boolean) => {
  * @return {Promise.boolean}
  */
 const canStartGames = () => {
+	if (__SPORT === "football") {
+		footballCoach.assertCanSimulate(g.get("lid"));
+	}
 	if (locks.newPhase) {
 		return false;
 	}

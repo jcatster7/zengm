@@ -33,6 +33,7 @@ import {
 	type FastForward,
 } from "../../components/PlayPauseNext.tsx";
 import { Confetti } from "./Confetti.tsx";
+import { InteractiveFootball } from "./InteractiveFootball.tsx";
 import { BoxScoreRow } from "../../components/BoxScoreRow.tsx";
 import { getPeriodName } from "../../../common/getPeriodName.ts";
 import {
@@ -278,7 +279,9 @@ const getNavigateWarning = (exhibition: boolean | undefined) => {
 		: "If you navigate away from this page, you won't be able to see these play-by-play results again. The results of this game are already final, though.";
 };
 
-export const LiveGame = (props: View<"liveGame">) => {
+export const LiveGame = (
+	props: Exclude<View<"liveGame">, { interactiveFootball: true }>,
+) => {
 	const [paused, setPaused] = useState(false);
 	const pausedRef = useRef(paused);
 	const [speed, setSpeed] = useLocalStorageState("live-game-speed", {
@@ -1126,6 +1129,10 @@ export const LiveGame = (props: View<"liveGame">) => {
 
 const LiveGameWrapper = (props: View<"liveGame">) => {
 	useTitleBar({ title: "Live Game Simulation", hideNewWindow: true });
+
+	if (props.interactiveFootball === true) {
+		return <InteractiveFootball />;
+	}
 
 	return <LiveGame {...props} />;
 };

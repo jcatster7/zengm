@@ -13,6 +13,7 @@ import toUI from "./toUI.ts";
 import type { Option } from "../../common/types.ts";
 import { idb } from "../db/index.ts";
 import { bySport } from "../../common/sportFunctions.ts";
+import { footballCoach } from "../core/game/footballCoach.ts";
 
 const updatePlayMenu = async () => {
 	if (__NODE_ENV === "test") {
@@ -25,7 +26,10 @@ const updatePlayMenu = async () => {
 
 	const allOptions = {
 		stop: {
-			label: "Stop",
+			label:
+				__SPORT === "football" && footballCoach.isActive()
+					? "Finish coached game"
+					: "Stop",
 		},
 		day: {
 			label: "One day",

@@ -13,14 +13,17 @@ import { formatClock } from "../../common/formatClock.ts";
 import { getPeriodName } from "../../common/getPeriodName.ts";
 import { bySport } from "../../common/sportFunctions.ts";
 import type { RouteParams } from "../../ui/router/types.ts";
+import { footballCoach } from "../core/game/footballCoach.ts";
 
 const processInputs = (params: RouteParams<"liveGame">, ctxBBGM: any) => {
 	const obj: {
 		fromAction: boolean;
+		interactiveFootball: boolean;
 		gid?: number;
 		playByPlay?: unknown[];
 	} = {
 		fromAction: !!ctxBBGM.fromAction,
+		interactiveFootball: !!ctxBBGM.interactiveFootball,
 	};
 
 	if (ctxBBGM.playByPlay !== undefined) {
@@ -181,6 +184,9 @@ export const boxScoreToLiveSim = async ({
 	}
 
 	return {
+		// View data is merged on same-route refreshes, so explicitly leave
+		// coaching mode when an ordinary Watch game loads here.
+		interactiveFootball: false as const,
 		confetti,
 		events: playByPlay,
 		initialBoxScore,
@@ -193,6 +199,15 @@ export default defineView({
 	id: "liveGame",
 	processInputs,
 	load: async ({ inputs, updateEvents }) => {
+		if (
+			__SPORT === "football" &&
+			(inputs.interactiveFootball ||
+				(!inputs.fromAction &&
+					!inputs.playByPlay &&
+					footballCoach.get(g.get("lid"))))
+		) {
+			return { interactiveFootball: true as const };
+		}
 		const redirectToMenu = {
 			redirectUrl: helpers.leagueUrl(["daily_schedule"]),
 		};

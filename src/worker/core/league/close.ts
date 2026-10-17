@@ -1,9 +1,13 @@
 import { idb } from "../../db/index.ts";
 import { g, local, lock, updateStatus } from "../../util/index.ts";
 import { cleanupAutoPlay } from "../league/autoPlay.ts";
+import { footballCoach } from "../game/footballCoach.ts";
 
 // Flush cache, disconnect from league database, and unset g.get("lid")
 const close = async (disconnect?: boolean) => {
+	// The pending simulator still uses this league's globals and database. Finish
+	// its normal stats-save pipeline before any caller can disconnect or switch.
+	await footballCoach.finishBeforeClosingLeague();
 	const gameSim = lock.get("gameSim");
 	cleanupAutoPlay();
 	await lock.set("stopGameSim", true);

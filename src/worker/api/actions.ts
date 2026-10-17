@@ -1,8 +1,18 @@
 import { PHASE } from "../../common/constants.ts";
 import { draft, game, season, trade } from "../core/index.ts";
 import { idb } from "../db/index.ts";
-import { g, helpers, toUI, updateStatus } from "../util/index.ts";
+import {
+	g,
+	helpers,
+	toUI,
+	updateStatus,
+	lock,
+	updatePlayMenu,
+} from "../util/index.ts";
 import type { Conditions, TradeTeams } from "../../common/types.ts";
+import type { FootballCoachDecision } from "../../common/footballCoach.ts";
+import type { FootballCoachTeam } from "../../common/footballCoachSession.ts";
+import { footballCoach } from "../core/game/footballCoach.ts";
 
 type TradeForOptions = {
 	dpid?: number;
@@ -173,6 +183,173 @@ const simGame = async (gid: number, conditions: Conditions) => {
 	await game.play(1, conditions, true, gid);
 };
 
+const interactiveGame = async (gid: number, conditions: Conditions) => {
+	if (__SPORT !== "football") {
+		throw new Error("Play calling is available for football games.");
+	}
+	if (!Number.isSafeInteger(gid) || gid < 0) {
+		throw new Error("Invalid game ID.");
+	}
+	if (footballCoach.isActive()) {
+		const session = footballCoach.get(g.get("lid"));
+		if (session?.gid !== gid) {
+			throw new Error("Finish the current coached game first.");
+		}
+		await toUI(
+			"realtimeUpdate",
+			[
+				[],
+				helpers.leagueUrl(["live_game"]),
+				{ fromAction: true, interactiveFootball: true },
+			],
+			conditions,
+		);
+		return;
+	}
+	const phase = g.get("phase");
+	if (
+		phase !== PHASE.REGULAR_SEASON &&
+		phase !== PHASE.AFTER_TRADE_DEADLINE &&
+		phase !== PHASE.PLAYOFFS
+	) {
+		throw new Error(
+			"Play calling requires a scheduled regular-season or playoff game.",
+		);
+	}
+	const lid = g.get("lid");
+	const seasonNumber = g.get("season");
+	let reserved = false;
+	let started = false;
+	try {
+		const scheduled = (await season.getSchedule(true)).find(
+			(item) => item.gid === gid,
+		);
+		if (g.get("lid") !== lid) {
+			throw new Error("The league changed before the game started.");
+		}
+		if (!scheduled || scheduled.homeTid < 0 || scheduled.awayTid < 0) {
+			throw new Error(
+				"Choose a normal matchup from the current week's schedule.",
+			);
+		}
+		if (scheduled.forceWin !== undefined) {
+			throw new Error(
+				"Clear Force win before calling plays. Quick sim still supports forced results.",
+			);
+		}
+		const getCoachTeam = async (tid: number): Promise<FootballCoachTeam> => {
+			const info = await idb.cache.teams.get(tid);
+			if (!info) {
+				throw new Error("A scheduled team is unavailable.");
+			}
+			return {
+				tid,
+				abbrev: info.abbrev,
+				region: info.region,
+				name: info.name,
+				colors: info.colors,
+				imgURL: info.imgURL,
+				imgURLSmall: info.imgURLSmall,
+			};
+		};
+		const teams = await Promise.all([
+			getCoachTeam(scheduled.homeTid),
+			getCoachTeam(scheduled.awayTid),
+		]);
+		if (
+			g.get("lid") !== lid ||
+			g.get("season") !== seasonNumber ||
+			g.get("phase") !== phase
+		) {
+			throw new Error(
+				"The league or season advanced before the game started. Refresh the schedule.",
+			);
+		}
+		// Read-only preparation precedes reservation. From this point through
+		// track(), no await can let another action switch leagues or start a game.
+		if (!lock.canStartGames()) {
+			throw new Error("Another simulation is already running.");
+		}
+		reserved = true;
+		footballCoach.start({ lid, gid, teams });
+		started = true;
+		// Keep one continuation through the existing native result-saving path.
+		// No submit/finalize endpoint accepts a client-generated score or stats.
+		// Register the continuation before yielding so a league switch can await it
+		// even while navigation and roster preparation are still in progress.
+		const completion = (async () => {
+			await lock.set("stopGameSim", false);
+			await toUI(
+				"realtimeUpdate",
+				[
+					[],
+					helpers.leagueUrl(["live_game"]),
+					{ fromAction: true, interactiveFootball: true },
+				],
+				conditions,
+			);
+			await game.play(1, conditions, false, gid, true, (snapshot) => {
+				if (g.get("lid") !== lid) {
+					throw new Error("The league changed during the coached game.");
+				}
+				return footballCoach.next(lid, snapshot);
+			});
+			const result = await idb.merged.games.get(gid);
+			if (!result) {
+				throw new Error(
+					"The game did not start. Check roster-size requirements and the current schedule.",
+				);
+			}
+			footballCoach.complete(
+				lid,
+				helpers.leagueUrl([
+					"game_log",
+					`${teams[0].abbrev}_${teams[0].tid}`,
+					seasonNumber,
+					gid,
+				]),
+			);
+		})().catch(async (error: unknown) => {
+			footballCoach.fail(lid, error);
+			// Never rerun a failed save: native writes might already have started.
+			await lock.set("gameSim", false);
+			await updateStatus();
+			await updatePlayMenu();
+		});
+		footballCoach.track(completion);
+	} catch (error) {
+		if (started) {
+			footballCoach.fail(lid, error);
+		}
+		if (reserved && g.get("lid") === lid) {
+			await lock.set("gameSim", false);
+			await updatePlayMenu();
+		}
+		throw error;
+	}
+};
+
+const getFootballCoach = () => footballCoach.get(g.get("lid"));
+const submitFootballCoach = (input: {
+	sessionId: string;
+	revision: number;
+	decision: FootballCoachDecision;
+}) => footballCoach.submit(g.get("lid"), input);
+const finishFootballCoach = ({ sessionId }: { sessionId: string }) =>
+	footballCoach.automate(g.get("lid"), sessionId, "end");
+const skipFootballCoach = ({
+	sessionId,
+	until,
+}: {
+	sessionId: string;
+	until: "twoMinute";
+}) => {
+	if (until !== "twoMinute") {
+		throw new Error("Invalid simulation target.");
+	}
+	footballCoach.automate(g.get("lid"), sessionId, until);
+};
+
 const simToGame = async (gid: number, conditions: Conditions) => {
 	const numDays = await season.getDaysLeftSchedule(gid);
 	await updateStatus("Playing..."); // For quick UI updating, before game.play
@@ -182,6 +359,11 @@ const simToGame = async (gid: number, conditions: Conditions) => {
 export default {
 	addToTradingBlock,
 	liveGame,
+	interactiveGame,
+	getFootballCoach,
+	submitFootballCoach,
+	finishFootballCoach,
+	skipFootballCoach,
 	simGame,
 	simToGame,
 	tradeFor,

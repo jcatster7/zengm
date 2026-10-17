@@ -42,6 +42,12 @@ import {
 	recomputeLocalUITeamOvrs,
 } from "../../util/recomputeLocalUITeamOvrs.ts";
 import { last } from "../../../common/utils.ts";
+import type GameSimFootball from "../GameSim.football/index.ts";
+import type {
+	FootballCoachDecision,
+	FootballCoachSnapshot,
+} from "../../../common/footballCoach.ts";
+import { footballCoach } from "./footballCoach.ts";
 import { advStats } from "../../util/advStats.ts";
 
 /**
@@ -61,7 +67,13 @@ const play = async (
 	start: boolean = true,
 	gidOneGame?: number,
 	playByPlay?: boolean,
+	coach?: (
+		snapshot: FootballCoachSnapshot,
+	) => Promise<FootballCoachDecision | undefined>,
 ) => {
+	if (__SPORT === "football") {
+		footballCoach.assertCanSimulate(g.get("lid"));
+	}
 	// This is called when there are no more games to play, either due to the user's request (e.g. 1 week) elapsing or at the end of the regular season
 	const cbNoGames = async (playoffsOver: boolean = false) => {
 		await lock.set("gameSim", false);
@@ -115,8 +127,11 @@ const play = async (
 
 	// Saves a vector of results objects for a day, as is output from cbSimGames
 	const cbSaveResults = async (results: GameResults[], dayOver: boolean) => {
+		if (coach) {
+			footballCoach.saving(g.get("lid"));
+		}
 		// Before writeGameStats, so LeagueTopBar can not update with game result
-		if (gidOneGame !== undefined && playByPlay) {
+		if (gidOneGame !== undefined && playByPlay && !coach) {
 			await toUI("updateLocal", [{ liveGameInProgress: true }]);
 
 			// Run this before writing player stats
@@ -330,7 +345,7 @@ const play = async (
 		let url;
 
 		// If there was a play by play done for one of these games, get it
-		if (gidOneGame !== undefined && playByPlay) {
+		if (gidOneGame !== undefined && playByPlay && !coach) {
 			for (const result of results) {
 				if (result.playByPlay !== undefined) {
 					raw = {
@@ -355,7 +370,7 @@ const play = async (
 		}
 	};
 
-	const getResult = ({
+	const getResult = async ({
 		gid,
 		day,
 		teams,
@@ -399,7 +414,7 @@ const play = async (
 			baseInjuryRate = g.get("injuryRate");
 		}
 
-		return new GameSim({
+		const sim = new GameSim({
 			gid,
 			day,
 			teams,
@@ -411,7 +426,17 @@ const play = async (
 
 			// @ts-expect-error
 			dh,
-		}).run();
+		});
+		if (__SPORT === "football" && coach && gid === gidOneGame) {
+			const footballSim = sim as GameSimFootball;
+			const result = await footballSim.runInteractive(coach);
+			footballCoach.updateFinalSnapshot(
+				g.get("lid"),
+				footballSim.getCoachSnapshot("play"),
+			);
+			return result;
+		}
+		return sim.run();
 	};
 
 	// Simulates a day of games (whatever is in schedule) and passes the results to cbSaveResults
@@ -423,6 +448,9 @@ const play = async (
 		const results = [];
 
 		for (const game of schedule) {
+			if (coach && game.forceWin !== undefined) {
+				throw new Error("Clear Force win before calling plays in this game.");
+			}
 			const doPlayByPlay = gidOneGame === game.gid && playByPlay;
 
 			const teamsInput = [teams[game.homeTid], teams[game.awayTid]] as any;
@@ -479,7 +507,7 @@ const play = async (
 						}
 					}
 
-					const result = getResult({
+					const result = await getResult({
 						gid: game.gid,
 						day: game.day,
 						teams: helpers.deepCopy(teamsInput), // So stats start at 0 each time
@@ -550,7 +578,7 @@ const play = async (
 					(g.get("neutralSite") === "playoffs" ||
 						(g.get("neutralSite") === "finals" && game.finals));
 
-				const result = getResult({
+				const result = await getResult({
 					gid: game.gid,
 					day: game.day,
 					teams: teamsInput,

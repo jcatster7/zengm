@@ -14,6 +14,7 @@ import {
 import { runDraft } from "./actions.ts";
 import { bySport } from "../../common/sportFunctions.ts";
 import { cleanupAutoPlay } from "../core/league/autoPlay.ts";
+import { footballCoach } from "../core/game/footballCoach.ts";
 
 const getNumDaysThisRound = (playoffSeries: PlayoffSeries) => {
 	let numDaysThisRound = 0;
@@ -157,6 +158,10 @@ const playAmount = async (
 };
 
 const playStop = async () => {
+	if (footballCoach.isActive()) {
+		await footballCoach.finishBeforeClosingLeague();
+		return;
+	}
 	await lock.set("stopGameSim", true);
 
 	if (g.get("phase") !== PHASE.FREE_AGENCY) {
