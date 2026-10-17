@@ -41,6 +41,7 @@ import {
 } from "./CoachField.tsx";
 import { CoachPlayerDetails, CoachRoster } from "./CoachRoster.tsx";
 import { FootballCoachDataPanel } from "./FootballCoachDataPanel.tsx";
+import { FootballCoachBoxScore } from "./FootballCoachBoxScore.tsx";
 
 const playLabels: Record<
 	FootballCoachPlay,
@@ -508,658 +509,680 @@ export const InteractiveFootball = () => {
 		}
 	};
 	return (
-		<div className="football-coach">
-			<div className="football-coach-toolbar">
-				<div>
-					<div className="football-coach-eyebrow">Football GM · Game day</div>
-					<h2 className="football-coach-heading">
-						Coach {session.teams[controlledTeam].abbrev}
-					</h2>
-				</div>
-				<div className="football-coach-toolbar-actions">
-					{finished ? (
-						<>
-							{session.boxScoreUrl ? (
-								<a
-									className="football-coach-button is-primary"
-									href={session.boxScoreUrl}
-								>
-									Box score
-								</a>
-							) : null}
-							<a
-								className="football-coach-button"
-								href={helpers.leagueUrl(["daily_schedule"])}
-							>
-								Weekly schedule
-							</a>
-						</>
-					) : (
-						<>
-							<button
-								type="button"
-								className="football-coach-button is-subtle"
-								disabled={
-									disabled ||
-									!snapshot ||
-									snapshot.quarter > snapshot.numPeriods ||
-									(snapshot.quarter === snapshot.numPeriods &&
-										snapshot.clock <= 2)
-								}
-								onClick={() =>
-									void act(() =>
-										toWorker("actions", "skipFootballCoach", {
-											sessionId: session.sessionId,
-											until: "twoMinute",
-										}),
-									)
-								}
-							>
-								Final 2:00
-							</button>
-							<button
-								type="button"
-								className="football-coach-button is-subtle"
-								disabled={disabled}
-								onClick={() =>
-									void act(() =>
-										toWorker("actions", "finishFootballCoach", {
-											sessionId: session.sessionId,
-										}),
-									)
-								}
-							>
-								Finish automatically
-							</button>
-						</>
-					)}
-				</div>
-			</div>
-			{error || session.error || pollError ? (
-				<div className="football-coach-error" role="alert">
-					{error ?? session.error ?? pollError}
-				</div>
-			) : null}
-			<div className="football-coach-scoreboard">
-				{TEAM_NUMS_DISPLAY_ORDER.map((t, index) => (
-					<Fragment key={t}>
-						{index === 1 ? (
-							<div className="football-coach-clock" aria-live="polite">
-								<div className="football-coach-eyebrow">
-									{session.status === "complete" ? "Final" : period}
-								</div>
-								<div className="football-coach-time">
-									{session.status === "complete"
-										? "FINAL"
-										: snapshot
-											? formatClock(snapshot.clock)
-											: "—"}
-								</div>
-								<div className="football-coach-muted" style={{ fontSize: 10 }}>
-									{!finished && snapshot?.isClockRunning
-										? "Clock running"
-										: "Clock stopped"}
-								</div>
-							</div>
-						) : null}
-						<div
-							className="football-coach-team"
-							style={{ borderTopColor: session.teams[t].colors[0] }}
-						>
-							<TeamLogoInline
-								imgURL={session.teams[t].imgURL}
-								imgURLSmall={session.teams[t].imgURLSmall}
-								size={37}
-							/>
-							<div className="football-coach-team-copy">
-								<div className="football-coach-team-meta">
-									{t === 0 ? "Home" : "Away"}
-									{t === controlledTeam ? " · Your team" : ""}
-								</div>
-								<div
-									className="football-coach-team-name"
-									title={`${session.teams[t].region} ${session.teams[t].name}`}
-								>
-									{session.teams[t].name}
-								</div>
-								<div
-									className="football-coach-timeouts"
-									aria-label={`${snapshot?.timeouts[t] ?? 3} timeouts remaining`}
-								>
-									{Array.from(
-										{ length: Math.max(3, snapshot?.timeouts[t] ?? 3) },
-										(_, i) => (
-											<span
-												key={i}
-												className={
-													i < (snapshot?.timeouts[t] ?? 3)
-														? "is-available"
-														: undefined
-												}
-											/>
-										),
-									)}
-								</div>
-							</div>
-							<div>
-								<div className="football-coach-score">
-									{snapshot?.teams[t].pts ?? 0}
-								</div>
-								{snapshot?.teams[t].sPts !== undefined ? (
-									<small>Shootout {snapshot.teams[t].sPts}</small>
-								) : null}
-							</div>
-						</div>
-					</Fragment>
-				))}
-			</div>
-			<div className="football-coach-situation">
-				{snapshot ? (
-					<strong className="football-coach-possession">
-						{session.teams[snapshot.offense].abbrev} ·{" "}
-						{snapshot.awaitingKickoff !== undefined
-							? "Kickoff"
-							: snapshot.awaitingAfterTouchdown
-								? "After touchdown"
-								: formatDownAndDistance(
-										snapshot.down,
-										snapshot.toGo,
-										snapshot.scrimmage,
-									)}{" "}
-						·{" "}
-						{scrimmageToFieldPos(
-							snapshot.scrimmage,
-							session.teams[snapshot.offense].abbrev,
-							session.teams[snapshot.defense].abbrev,
-						)}
-					</strong>
-				) : (
-					<span />
-				)}
-				<span className="football-coach-muted" role="status">
-					{statusText}
-				</span>
-			</div>
-			{snapshot ? (
-				<div className="football-coach-layout">
+		<>
+			<div className="football-coach">
+				<div className="football-coach-toolbar">
 					<div>
-						<CoachField
-							snapshot={fieldSnapshot ?? snapshot}
-							preview={preSnap}
-							session={session}
-							call={preSnap && ownOffense ? call : undefined}
-							route={selectedRoute}
-							offense={offenseLineup}
-							defense={defenseLineup}
-							targetPid={preSnap && ownOffense ? target?.id : undefined}
-							runnerPid={preSnap && ownOffense ? runner?.id : undefined}
-							inspected={inspected}
-							onSelect={selectFieldPlayer}
-						/>
-						<p
-							className="football-coach-muted mt-2 mb-0"
-							style={{ fontSize: 10 }}
-						>
-							{preSnap
-								? "Formation preview. The opponent chooses its personnel at the snap. Routes show your call, not the completed play."
-								: "Players from the last snap. The play log records the result."}
-						</p>
-						{inspectedPlayer ? (
-							<details open className="football-coach-panel mt-3">
-								<summary className="football-coach-panel-title">
-									Player details
-								</summary>
-								<CoachPlayerDetails
-									player={inspectedPlayer}
-									energy={
-										snapshot.eligibleReceivers?.find(
-											(player) => player.id === inspectedPlayer.pid,
-										)?.energy ??
-										snapshot.eligibleRushers?.find(
-											(player) => player.id === inspectedPlayer.pid,
-										)?.energy
-									}
-								/>
-							</details>
-						) : null}
-						<RecentPlays session={session} snapshot={snapshot} />
+						<div className="football-coach-eyebrow">Football GM · Game day</div>
+						<h2 className="football-coach-heading">
+							Coach {session.teams[controlledTeam].abbrev}
+						</h2>
 					</div>
-					<div>
-						<div
-							className="football-coach-tabs"
-							role="tablist"
-							aria-label="Game controls"
-						>
-							{(["playbook", "roster", "data"] as const).map((value) => (
-								<button
-									type="button"
-									key={value}
-									className={`football-coach-tab${tab === value ? " is-active" : ""}`}
-									role="tab"
-									aria-selected={tab === value}
-									onClick={() => setTab(value)}
+					<div className="football-coach-toolbar-actions">
+						{finished ? (
+							<>
+								{session.boxScoreUrl ? (
+									<a
+										className="football-coach-button is-primary"
+										href={session.boxScoreUrl}
+									>
+										Box score
+									</a>
+								) : null}
+								<a
+									className="football-coach-button"
+									href={helpers.leagueUrl(["daily_schedule"])}
 								>
-									{value === "playbook"
-										? "Playbook"
-										: value === "roster"
-											? "Roster & ratings"
-											: "Data"}
-								</button>
-							))}
-						</div>
-						{tab === "roster" ? (
-							<div className="football-coach-panel">
-								<CoachRoster
-									session={session}
-									inspected={inspected}
-									onSelect={(team, pid) => setInspected({ team, pid })}
-								/>
-							</div>
-						) : tab === "data" ? (
-							<FootballCoachDataPanel session={session} />
+									Weekly schedule
+								</a>
+							</>
 						) : (
 							<>
-								{finished ? (
-									<div className="football-coach-panel football-coach-empty">
-										<h3 className="football-coach-panel-title">{statusText}</h3>
-										{session.status === "complete" ? (
-											<p className="mb-0">
-												This result, player statistics, and injuries now count
-												in your league.
-											</p>
-										) : (
-											<p className="mb-0">
-												{session.requiresRecovery
-													? "Keep this league open and follow the error message to recover the game."
-													: "Return to the weekly schedule to continue."}
-											</p>
+								<button
+									type="button"
+									className="football-coach-button is-subtle"
+									disabled={
+										disabled ||
+										!snapshot ||
+										snapshot.quarter > snapshot.numPeriods ||
+										(snapshot.quarter === snapshot.numPeriods &&
+											snapshot.clock <= 2)
+									}
+									onClick={() =>
+										void act(() =>
+											toWorker("actions", "skipFootballCoach", {
+												sessionId: session.sessionId,
+												until: "twoMinute",
+											}),
+										)
+									}
+								>
+									Final 2:00
+								</button>
+								<button
+									type="button"
+									className="football-coach-button is-subtle"
+									disabled={disabled}
+									onClick={() =>
+										void act(() =>
+											toWorker("actions", "finishFootballCoach", {
+												sessionId: session.sessionId,
+											}),
+										)
+									}
+								>
+									Finish automatically
+								</button>
+							</>
+						)}
+					</div>
+				</div>
+				{error || session.error || pollError ? (
+					<div className="football-coach-error" role="alert">
+						{error ?? session.error ?? pollError}
+					</div>
+				) : null}
+				<div className="football-coach-scoreboard">
+					{TEAM_NUMS_DISPLAY_ORDER.map((t, index) => (
+						<Fragment key={t}>
+							{index === 1 ? (
+								<div className="football-coach-clock" aria-live="polite">
+									<div className="football-coach-eyebrow">
+										{session.status === "complete" ? "Final" : period}
+									</div>
+									<div className="football-coach-time">
+										{session.status === "complete"
+											? "FINAL"
+											: snapshot
+												? formatClock(snapshot.clock)
+												: "—"}
+									</div>
+									<div
+										className="football-coach-muted"
+										style={{ fontSize: 10 }}
+									>
+										{!finished && snapshot?.isClockRunning
+											? "Clock running"
+											: "Clock stopped"}
+									</div>
+								</div>
+							) : null}
+							<div
+								className="football-coach-team"
+								style={{ borderTopColor: session.teams[t].colors[0] }}
+							>
+								<TeamLogoInline
+									imgURL={session.teams[t].imgURL}
+									imgURLSmall={session.teams[t].imgURLSmall}
+									size={37}
+								/>
+								<div className="football-coach-team-copy">
+									<div className="football-coach-team-meta">
+										{t === 0 ? "Home" : "Away"}
+										{t === controlledTeam ? " · Your team" : ""}
+									</div>
+									<div
+										className="football-coach-team-name"
+										title={`${session.teams[t].region} ${session.teams[t].name}`}
+									>
+										{session.teams[t].name}
+									</div>
+									<div
+										className="football-coach-timeouts"
+										aria-label={`${snapshot?.timeouts[t] ?? 3} timeouts remaining`}
+									>
+										{Array.from(
+											{ length: Math.max(3, snapshot?.timeouts[t] ?? 3) },
+											(_, i) => (
+												<span
+													key={i}
+													className={
+														i < (snapshot?.timeouts[t] ?? 3)
+															? "is-available"
+															: undefined
+													}
+												/>
+											),
 										)}
 									</div>
-								) : snapshot.stage === "clock" ? (
-									<section className="football-coach-panel">
-										<div className="football-coach-eyebrow">Between plays</div>
-										<h3 className="football-coach-panel-title mt-1">
-											Manage the clock
-										</h3>
-										<p className="football-coach-muted">
-											{snapshot.isClockRunning
-												? "Time is paused here so you can call a timeout before the next runoff."
-												: "The clock is stopped. Continue to the next play."}
-										</p>
-										{ownOffense ? (
-											<div className="football-coach-clock-actions">
+								</div>
+								<div>
+									<div className="football-coach-score">
+										{snapshot?.teams[t].pts ?? 0}
+									</div>
+									{snapshot?.teams[t].sPts !== undefined ? (
+										<small>Shootout {snapshot.teams[t].sPts}</small>
+									) : null}
+								</div>
+							</div>
+						</Fragment>
+					))}
+				</div>
+				<div className="football-coach-situation">
+					{snapshot ? (
+						<strong className="football-coach-possession">
+							{session.teams[snapshot.offense].abbrev} ·{" "}
+							{snapshot.awaitingKickoff !== undefined
+								? "Kickoff"
+								: snapshot.awaitingAfterTouchdown
+									? "After touchdown"
+									: formatDownAndDistance(
+											snapshot.down,
+											snapshot.toGo,
+											snapshot.scrimmage,
+										)}{" "}
+							·{" "}
+							{scrimmageToFieldPos(
+								snapshot.scrimmage,
+								session.teams[snapshot.offense].abbrev,
+								session.teams[snapshot.defense].abbrev,
+							)}
+						</strong>
+					) : (
+						<span />
+					)}
+					<span className="football-coach-muted" role="status">
+						{statusText}
+					</span>
+				</div>
+				{snapshot ? (
+					<div className="football-coach-layout">
+						<div>
+							<CoachField
+								snapshot={fieldSnapshot ?? snapshot}
+								preview={preSnap}
+								session={session}
+								call={preSnap && ownOffense ? call : undefined}
+								route={selectedRoute}
+								offense={offenseLineup}
+								defense={defenseLineup}
+								targetPid={preSnap && ownOffense ? target?.id : undefined}
+								runnerPid={preSnap && ownOffense ? runner?.id : undefined}
+								inspected={inspected}
+								onSelect={selectFieldPlayer}
+							/>
+							<p
+								className="football-coach-muted mt-2 mb-0"
+								style={{ fontSize: 10 }}
+							>
+								{preSnap
+									? "Formation preview. The opponent chooses its personnel at the snap. Routes show your call, not the completed play."
+									: "Players from the last snap. The play log records the result."}
+							</p>
+							{inspectedPlayer ? (
+								<details open className="football-coach-panel mt-3">
+									<summary className="football-coach-panel-title">
+										Player details
+									</summary>
+									<CoachPlayerDetails
+										player={inspectedPlayer}
+										energy={
+											snapshot.eligibleReceivers?.find(
+												(player) => player.id === inspectedPlayer.pid,
+											)?.energy ??
+											snapshot.eligibleRushers?.find(
+												(player) => player.id === inspectedPlayer.pid,
+											)?.energy
+										}
+									/>
+								</details>
+							) : null}
+							<RecentPlays session={session} snapshot={snapshot} />
+						</div>
+						<div>
+							<div
+								className="football-coach-tabs"
+								role="tablist"
+								aria-label="Game controls"
+							>
+								{(["playbook", "roster", "data"] as const).map((value) => (
+									<button
+										type="button"
+										key={value}
+										className={`football-coach-tab${tab === value ? " is-active" : ""}`}
+										role="tab"
+										aria-selected={tab === value}
+										onClick={() => setTab(value)}
+									>
+										{value === "playbook"
+											? "Playbook"
+											: value === "roster"
+												? "Roster & ratings"
+												: "Data"}
+									</button>
+								))}
+							</div>
+							{tab === "roster" ? (
+								<div className="football-coach-panel">
+									<CoachRoster
+										session={session}
+										inspected={inspected}
+										onSelect={(team, pid) => setInspected({ team, pid })}
+									/>
+								</div>
+							) : tab === "data" ? (
+								<FootballCoachDataPanel session={session} />
+							) : (
+								<>
+									{finished ? (
+										<div className="football-coach-panel football-coach-empty">
+											<h3 className="football-coach-panel-title">
+												{statusText}
+											</h3>
+											{session.status === "complete" ? (
+												<p className="mb-0">
+													This result, player statistics, and injuries now count
+													in your league.
+												</p>
+											) : (
+												<p className="mb-0">
+													{session.requiresRecovery
+														? "Keep this league open and follow the error message to recover the game."
+														: "Return to the weekly schedule to continue."}
+												</p>
+											)}
+										</div>
+									) : snapshot.stage === "clock" ? (
+										<section className="football-coach-panel">
+											<div className="football-coach-eyebrow">
+												Between plays
+											</div>
+											<h3 className="football-coach-panel-title mt-1">
+												Manage the clock
+											</h3>
+											<p className="football-coach-muted">
+												{snapshot.isClockRunning
+													? "Time is paused here so you can call a timeout before the next runoff."
+													: "The clock is stopped. Continue to the next play."}
+											</p>
+											{ownOffense ? (
+												<div className="football-coach-clock-actions">
+													<button
+														type="button"
+														className="football-coach-button is-primary"
+														disabled={disabled}
+														onClick={() => submit({ tempo: "normal" })}
+													>
+														Huddle
+													</button>
+													<button
+														type="button"
+														className="football-coach-button"
+														disabled={disabled}
+														onClick={() => submit({ tempo: "hurryUp" })}
+													>
+														No huddle
+													</button>
+													<button
+														type="button"
+														className="football-coach-button"
+														disabled={disabled}
+														onClick={() => submit({ tempo: "chewClock" })}
+													>
+														Run the clock
+													</button>
+												</div>
+											) : (
 												<button
 													type="button"
 													className="football-coach-button is-primary"
 													disabled={disabled}
-													onClick={() => submit({ tempo: "normal" })}
+													onClick={() => submit({})}
 												>
-													Huddle
+													Continue · opponent controls tempo
 												</button>
+											)}
+											<div className="football-coach-clock-actions">
 												<button
 													type="button"
 													className="football-coach-button"
-													disabled={disabled}
-													onClick={() => submit({ tempo: "hurryUp" })}
+													disabled={
+														disabled || !snapshot.canTimeout[controlledTeam]
+													}
+													onClick={() => submit({ timeout: controlledTeam })}
 												>
-													No huddle
-												</button>
-												<button
-													type="button"
-													className="football-coach-button"
-													disabled={disabled}
-													onClick={() => submit({ tempo: "chewClock" })}
-												>
-													Run the clock
+													{session.teams[controlledTeam].abbrev} timeout ·{" "}
+													{snapshot.timeouts[controlledTeam]} left
 												</button>
 											</div>
-										) : (
-											<button
-												type="button"
-												className="football-coach-button is-primary"
-												disabled={disabled}
-												onClick={() => submit({})}
-											>
-												Continue · opponent controls tempo
-											</button>
-										)}
-										<div className="football-coach-clock-actions">
-											<button
-												type="button"
-												className="football-coach-button"
-												disabled={
-													disabled || !snapshot.canTimeout[controlledTeam]
-												}
-												onClick={() => submit({ timeout: controlledTeam })}
-											>
-												{session.teams[controlledTeam].abbrev} timeout ·{" "}
-												{snapshot.timeouts[controlledTeam]} left
-											</button>
-										</div>
-									</section>
-								) : ownOffense ? (
-									<>
-										{allowedCalls.length > 0 ? (
-											<>
-												<div
-													className="football-coach-category-tabs"
-													aria-label="Play categories"
-												>
-													{(["run", "pass", "rpo", "trick"] as const).map(
-														(value) => (
+										</section>
+									) : ownOffense ? (
+										<>
+											{allowedCalls.length > 0 ? (
+												<>
+													<div
+														className="football-coach-category-tabs"
+														aria-label="Play categories"
+													>
+														{(["run", "pass", "rpo", "trick"] as const).map(
+															(value) => (
+																<button
+																	type="button"
+																	className={`football-coach-category${group === value ? " is-active" : ""}`}
+																	aria-pressed={group === value}
+																	disabled={
+																		disabled ||
+																		!allowedCalls.some(
+																			(entry) => entry.group === value,
+																		)
+																	}
+																	key={value}
+																	onClick={() => chooseGroup(value)}
+																>
+																	{groupLabels[value]}
+																</button>
+															),
+														)}
+													</div>
+													<div
+														className="football-coach-chip-row mb-3"
+														aria-label="Personnel packages"
+													>
+														<button
+															type="button"
+															className={`football-coach-chip${personnel === "all" ? " is-active" : ""}`}
+															aria-pressed={personnel === "all"}
+															disabled={disabled}
+															onClick={() => choosePersonnel("all")}
+														>
+															All personnel
+														</button>
+														{(
+															Object.keys(
+																FOOTBALL_COACH_PERSONNEL,
+															) as FootballCoachFormation[]
+														).map((value) => (
 															<button
 																type="button"
-																className={`football-coach-category${group === value ? " is-active" : ""}`}
-																aria-pressed={group === value}
+																key={value}
+																className={`football-coach-chip${personnel === value ? " is-active" : ""}`}
+																aria-pressed={personnel === value}
 																disabled={
 																	disabled ||
 																	!allowedCalls.some(
-																		(entry) => entry.group === value,
+																		(entry) => entry.formation === value,
 																	)
 																}
-																key={value}
-																onClick={() => chooseGroup(value)}
+																title={`${FOOTBALL_COACH_PERSONNEL[value].positions.RB} RB, ${FOOTBALL_COACH_PERSONNEL[value].positions.TE} TE`}
+																onClick={() => choosePersonnel(value)}
 															>
-																{groupLabels[value]}
+																{value}
 															</button>
-														),
+														))}
+													</div>
+													<div className="football-coach-playcards">
+														{visibleCalls.map((entry) => (
+															<button
+																type="button"
+																key={entry.id}
+																className={`football-coach-playcard${call?.id === entry.id ? " is-selected" : ""}`}
+																aria-pressed={call?.id === entry.id}
+																disabled={disabled}
+																onClick={() => chooseCall(entry.id)}
+																title={entry.description}
+															>
+																<span className="football-coach-playcard-name">
+																	{entry.name}
+																</span>
+																<CoachPlayDiagram call={entry} />
+																<span className="football-coach-playcard-meta">
+																	{entry.formation} personnel
+																</span>
+															</button>
+														))}
+													</div>
+													{call ? (
+														<p className="football-coach-play-description">
+															{call.description}
+														</p>
+													) : (
+														<p className="football-coach-muted">
+															Choose another category or personnel package.
+														</p>
 													)}
+													{call && (target || runner) ? (
+														<section className="football-coach-panel football-coach-receiver-detail">
+															<h3 className="football-coach-panel-title">
+																{call.kind === "option"
+																	? "Read-option personnel"
+																	: call.kind === "run"
+																		? "Ball carrier"
+																		: "Target & route"}
+															</h3>
+															{target ? (
+																<>
+																	<label
+																		className="football-coach-label"
+																		htmlFor="football-coach-receiver"
+																	>
+																		Target receiver · tap a receiver on the
+																		field to select
+																	</label>
+																	<select
+																		id="football-coach-receiver"
+																		className="football-coach-select"
+																		value={target.id}
+																		disabled={disabled}
+																		onChange={(event) => {
+																			const pid = Number(event.target.value);
+																			setTargetPid(pid);
+																			setInspected({
+																				team: controlledTeam,
+																				pid,
+																			});
+																		}}
+																	>
+																		{receivers.map((player) => (
+																			<option key={player.id} value={player.id}>
+																				{player.pos} {player.name}
+																				{!preview.some(
+																					(p) => p.id === player.id,
+																				)
+																					? " · substitute"
+																					: ""}
+																			</option>
+																		))}
+																	</select>
+																	<div className="football-coach-label mt-3">
+																		Receiver route
+																	</div>
+																	<div className="football-coach-route-grid">
+																		{FOOTBALL_COACH_ROUTES.map((entry) => (
+																			<button
+																				type="button"
+																				key={entry.id}
+																				className={`football-coach-chip${selectedRoute === entry.id ? " is-active" : ""}`}
+																				aria-pressed={
+																					selectedRoute === entry.id
+																				}
+																				disabled={disabled}
+																				onClick={() => setRoute(entry.id)}
+																			>
+																				{entry.name}
+																			</button>
+																		))}
+																	</div>
+																</>
+															) : null}
+															{runner ? (
+																<div className={target ? "mt-3" : undefined}>
+																	<label
+																		className="football-coach-label"
+																		htmlFor="football-coach-runner"
+																	>
+																		Runner
+																	</label>
+																	<select
+																		id="football-coach-runner"
+																		className="football-coach-select"
+																		value={runner.id}
+																		disabled={disabled}
+																		onChange={(event) => {
+																			const pid = Number(event.target.value);
+																			setRunnerPid(pid);
+																			setInspected({
+																				team: controlledTeam,
+																				pid,
+																			});
+																		}}
+																	>
+																		{rushers.map((player) => (
+																			<option key={player.id} value={player.id}>
+																				{player.pos} {player.name}
+																				{!preview.some(
+																					(p) => p.id === player.id,
+																				)
+																					? " · substitute"
+																					: ""}
+																			</option>
+																		))}
+																	</select>
+																</div>
+															) : null}
+														</section>
+													) : null}
+												</>
+											) : (
+												<div className="football-coach-panel">
+													<div className="football-coach-eyebrow">
+														Special teams
+													</div>
+													<h3 className="football-coach-panel-title mt-1">
+														Choose the next play
+													</h3>
+													<p className="football-coach-muted mb-0">
+														Your kicker, punter, and return units come from this
+														league's depth charts.
+													</p>
 												</div>
-												<div
-													className="football-coach-chip-row mb-3"
-													aria-label="Personnel packages"
-												>
-													<button
-														type="button"
-														className={`football-coach-chip${personnel === "all" ? " is-active" : ""}`}
-														aria-pressed={personnel === "all"}
-														disabled={disabled}
-														onClick={() => choosePersonnel("all")}
-													>
-														All personnel
-													</button>
-													{(
-														Object.keys(
-															FOOTBALL_COACH_PERSONNEL,
-														) as FootballCoachFormation[]
-													).map((value) => (
+											)}
+											<div className="football-coach-specials">
+												{snapshot.allowedPlays
+													.filter(
+														(play) =>
+															allowedCalls.length === 0 ||
+															(play !== "run" && play !== "pass"),
+													)
+													.map((play) => (
 														<button
 															type="button"
-															key={value}
-															className={`football-coach-chip${personnel === value ? " is-active" : ""}`}
-															aria-pressed={personnel === value}
-															disabled={
-																disabled ||
-																!allowedCalls.some(
-																	(entry) => entry.formation === value,
-																)
-															}
-															title={`${FOOTBALL_COACH_PERSONNEL[value].positions.RB} RB, ${FOOTBALL_COACH_PERSONNEL[value].positions.TE} TE`}
-															onClick={() => choosePersonnel(value)}
-														>
-															{value}
-														</button>
-													))}
-												</div>
-												<div className="football-coach-playcards">
-													{visibleCalls.map((entry) => (
-														<button
-															type="button"
-															key={entry.id}
-															className={`football-coach-playcard${call?.id === entry.id ? " is-selected" : ""}`}
-															aria-pressed={call?.id === entry.id}
+															key={play}
+															className="football-coach-button"
+															title={playLabels[play].description}
 															disabled={disabled}
-															onClick={() => chooseCall(entry.id)}
-															title={entry.description}
+															onClick={() => submit({ play })}
 														>
-															<span className="football-coach-playcard-name">
-																{entry.name}
-															</span>
-															<CoachPlayDiagram call={entry} />
-															<span className="football-coach-playcard-meta">
-																{entry.formation} personnel
-															</span>
+															{playLabels[play].label}
+															{play === "fieldGoal"
+																? ` · ${117 - snapshot.scrimmage} yd`
+																: ""}
 														</button>
 													))}
-												</div>
-												{call ? (
-													<p className="football-coach-play-description">
-														{call.description}
-													</p>
-												) : (
-													<p className="football-coach-muted">
-														Choose another category or personnel package.
-													</p>
-												)}
-												{call && (target || runner) ? (
-													<section className="football-coach-panel football-coach-receiver-detail">
-														<h3 className="football-coach-panel-title">
-															{call.kind === "option"
-																? "Read-option personnel"
-																: call.kind === "run"
-																	? "Ball carrier"
-																	: "Target & route"}
-														</h3>
-														{target ? (
-															<>
-																<label
-																	className="football-coach-label"
-																	htmlFor="football-coach-receiver"
-																>
-																	Target receiver · tap a receiver on the field
-																	to select
-																</label>
-																<select
-																	id="football-coach-receiver"
-																	className="football-coach-select"
-																	value={target.id}
-																	disabled={disabled}
-																	onChange={(event) => {
-																		const pid = Number(event.target.value);
-																		setTargetPid(pid);
-																		setInspected({ team: controlledTeam, pid });
-																	}}
-																>
-																	{receivers.map((player) => (
-																		<option key={player.id} value={player.id}>
-																			{player.pos} {player.name}
-																			{!preview.some((p) => p.id === player.id)
-																				? " · substitute"
-																				: ""}
-																		</option>
-																	))}
-																</select>
-																<div className="football-coach-label mt-3">
-																	Receiver route
-																</div>
-																<div className="football-coach-route-grid">
-																	{FOOTBALL_COACH_ROUTES.map((entry) => (
-																		<button
-																			type="button"
-																			key={entry.id}
-																			className={`football-coach-chip${selectedRoute === entry.id ? " is-active" : ""}`}
-																			aria-pressed={selectedRoute === entry.id}
-																			disabled={disabled}
-																			onClick={() => setRoute(entry.id)}
-																		>
-																			{entry.name}
-																		</button>
-																	))}
-																</div>
-															</>
-														) : null}
-														{runner ? (
-															<div className={target ? "mt-3" : undefined}>
-																<label
-																	className="football-coach-label"
-																	htmlFor="football-coach-runner"
-																>
-																	Runner
-																</label>
-																<select
-																	id="football-coach-runner"
-																	className="football-coach-select"
-																	value={runner.id}
-																	disabled={disabled}
-																	onChange={(event) => {
-																		const pid = Number(event.target.value);
-																		setRunnerPid(pid);
-																		setInspected({ team: controlledTeam, pid });
-																	}}
-																>
-																	{rushers.map((player) => (
-																		<option key={player.id} value={player.id}>
-																			{player.pos} {player.name}
-																			{!preview.some((p) => p.id === player.id)
-																				? " · substitute"
-																				: ""}
-																		</option>
-																	))}
-																</select>
-															</div>
-														) : null}
-													</section>
-												) : null}
-											</>
-										) : (
-											<div className="football-coach-panel">
-												<div className="football-coach-eyebrow">
-													Special teams
-												</div>
-												<h3 className="football-coach-panel-title mt-1">
-													Choose the next play
-												</h3>
-												<p className="football-coach-muted mb-0">
-													Your kicker, punter, and return units come from this
-													league's depth charts.
-												</p>
 											</div>
-										)}
-										<div className="football-coach-specials">
-											{snapshot.allowedPlays
-												.filter(
-													(play) =>
-														allowedCalls.length === 0 ||
-														(play !== "run" && play !== "pass"),
-												)
-												.map((play) => (
+											{allowedCalls.length > 0 ? (
+												<div className="football-coach-snapbar">
+													<div>
+														<strong>{call?.name ?? "Choose a play"}</strong>
+														<div className="football-coach-muted">
+															{call
+																? `${call.formation} personnel${selectedRoute ? ` · ${getFootballCoachRoute(selectedRoute).name}` : ""}`
+																: ""}
+														</div>
+													</div>
 													<button
 														type="button"
-														key={play}
-														className="football-coach-button"
-														title={playLabels[play].description}
-														disabled={disabled}
-														onClick={() => submit({ play })}
+														className="football-coach-snap"
+														disabled={disabled || !call}
+														onClick={snap}
 													>
-														{playLabels[play].label}
-														{play === "fieldGoal"
-															? ` · ${117 - snapshot.scrimmage} yd`
-															: ""}
+														{busy ? "Playing…" : "Snap ball"}
+													</button>
+												</div>
+											) : null}
+											<button
+												type="button"
+												className="football-coach-button is-subtle mt-3"
+												disabled={disabled}
+												onClick={() => submit({ play: "auto" })}
+											>
+												Let the coach call this play
+											</button>
+										</>
+									) : (
+										<section className="football-coach-panel">
+											<div className="football-coach-eyebrow">
+												{session.teams[controlledTeam].abbrev} defense
+											</div>
+											<h3 className="football-coach-panel-title mt-1">
+												Make the stop
+											</h3>
+											<p className="football-coach-muted">
+												Choose your front and coverage.{" "}
+												{session.teams[snapshot.offense].abbrev} calls its own
+												offense.
+											</p>
+											<div className="football-coach-defense-cards">
+												{allowedDefenses.map((entry) => (
+													<button
+														type="button"
+														key={entry.id}
+														className={`football-coach-defense${defense?.id === entry.id ? " is-selected" : ""}`}
+														aria-pressed={defense?.id === entry.id}
+														disabled={disabled}
+														onClick={() => setDefenseId(entry.id)}
+													>
+														<strong>{entry.name}</strong>
+														<small>
+															{entry.rushers} rushers · {entry.coverage}
+														</small>
 													</button>
 												))}
-										</div>
-										{allowedCalls.length > 0 ? (
+											</div>
+											{defense ? (
+												<p className="football-coach-play-description">
+													{getFootballCoachDefense(defense.id).description}
+												</p>
+											) : null}
 											<div className="football-coach-snapbar">
 												<div>
-													<strong>{call?.name ?? "Choose a play"}</strong>
+													<strong>
+														{defense?.name ?? "Opponent special teams"}
+													</strong>
 													<div className="football-coach-muted">
-														{call
-															? `${call.formation} personnel${selectedRoute ? ` · ${getFootballCoachRoute(selectedRoute).name}` : ""}`
-															: ""}
+														{session.teams[controlledTeam].abbrev} controls the
+														defense
 													</div>
 												</div>
 												<button
 													type="button"
 													className="football-coach-snap"
-													disabled={disabled || !call}
+													disabled={disabled}
 													onClick={snap}
 												>
-													{busy ? "Playing…" : "Snap ball"}
+													{busy ? "Playing…" : "Ready"}
 												</button>
-											</div>
-										) : null}
-										<button
-											type="button"
-											className="football-coach-button is-subtle mt-3"
-											disabled={disabled}
-											onClick={() => submit({ play: "auto" })}
-										>
-											Let the coach call this play
-										</button>
-									</>
-								) : (
-									<section className="football-coach-panel">
-										<div className="football-coach-eyebrow">
-											{session.teams[controlledTeam].abbrev} defense
-										</div>
-										<h3 className="football-coach-panel-title mt-1">
-											Make the stop
-										</h3>
-										<p className="football-coach-muted">
-											Choose your front and coverage.{" "}
-											{session.teams[snapshot.offense].abbrev} calls its own
-											offense.
-										</p>
-										<div className="football-coach-defense-cards">
-											{allowedDefenses.map((entry) => (
-												<button
-													type="button"
-													key={entry.id}
-													className={`football-coach-defense${defense?.id === entry.id ? " is-selected" : ""}`}
-													aria-pressed={defense?.id === entry.id}
-													disabled={disabled}
-													onClick={() => setDefenseId(entry.id)}
-												>
-													<strong>{entry.name}</strong>
-													<small>
-														{entry.rushers} rushers · {entry.coverage}
-													</small>
-												</button>
-											))}
-										</div>
-										{defense ? (
-											<p className="football-coach-play-description">
-												{getFootballCoachDefense(defense.id).description}
-											</p>
-										) : null}
-										<div className="football-coach-snapbar">
-											<div>
-												<strong>
-													{defense?.name ?? "Opponent special teams"}
-												</strong>
-												<div className="football-coach-muted">
-													{session.teams[controlledTeam].abbrev} controls the
-													defense
-												</div>
 											</div>
 											<button
 												type="button"
-												className="football-coach-snap"
+												className="football-coach-button is-subtle mt-3"
 												disabled={disabled}
-												onClick={snap}
+												onClick={() => submit({ play: "auto" })}
 											>
-												{busy ? "Playing…" : "Ready"}
+												Let the coach set the defense
 											</button>
-										</div>
-										<button
-											type="button"
-											className="football-coach-button is-subtle mt-3"
-											disabled={disabled}
-											onClick={() => submit({ play: "auto" })}
-										>
-											Let the coach set the defense
-										</button>
-									</section>
-								)}
-							</>
-						)}
+										</section>
+									)}
+								</>
+							)}
+						</div>
 					</div>
-				</div>
-			) : (
-				<div className="football-coach-empty" role="status">
-					{statusText}
-				</div>
-			)}
-		</div>
+				) : (
+					<div className="football-coach-empty" role="status">
+						{statusText}
+					</div>
+				)}
+			</div>
+			<FootballCoachBoxScore session={session} />
+		</>
 	);
 };

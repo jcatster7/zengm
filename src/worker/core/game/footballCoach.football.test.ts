@@ -743,6 +743,42 @@ test("a coached native game saves one box score and normal league stats before c
 			finalSnapshot.teams.map((t) => t.pts),
 			games[0]!.teams.map((t) => t.pts),
 		);
+		const finalBoxScore = finalSnapshot.boxScore!;
+		assert.isDefined(finalBoxScore);
+		assert.deepEqual(finalBoxScore.scoringSummary, games[0]!.scoringSummary);
+		// Use the native stat registry so every passing, rushing, receiving,
+		// defense, kicking, return, penalty, and blocking counter is covered.
+		const playerStats = player.stats.raw.filter((stat) => stat !== "min");
+		for (const t of [0, 1] as const) {
+			const liveTeam = finalBoxScore.teams[t];
+			const savedTeam = games[0]!.teams[t];
+			assert.strictEqual(liveTeam.id, savedTeam.tid);
+			assert.lengthOf(liveTeam.players, 50);
+			for (const [stat, value] of Object.entries(liveTeam.stat)) {
+				assert.deepEqual(value, savedTeam[stat], `Team ${t}: ${stat}`);
+			}
+			const livePlayersByPid = new Map(liveTeam.players.map((p) => [p.id, p]));
+			const savedPids = new Set(savedTeam.players.map((p) => p.pid));
+			for (const savedPlayer of savedTeam.players) {
+				const livePlayer = livePlayersByPid.get(savedPlayer.pid);
+				assert.isDefined(livePlayer, `Missing live player ${savedPlayer.pid}`);
+				for (const stat of playerStats) {
+					assert.strictEqual(
+						livePlayer!.stat[stat],
+						savedPlayer[stat],
+						`Player ${savedPlayer.pid}: ${stat}`,
+					);
+				}
+			}
+			// Native saved games omit DNPs; the live roster deliberately retains them.
+			for (const livePlayer of liveTeam.players) {
+				assert.strictEqual(
+					savedPids.has(livePlayer.id),
+					livePlayer.stat.gp! > 0,
+					`Player ${livePlayer.id}: participation`,
+				);
+			}
+		}
 		let closed = false;
 		const closing = closeLeague().then(() => {
 			closed = true;
@@ -756,9 +792,12 @@ test("a coached native game saves one box score and normal league stats before c
 		releaseFlush.resolve();
 		await completion;
 		await closing;
+		assert.strictEqual(footballCoach.get(7)!.status, "complete");
+		assert.deepEqual(footballCoach.get(7)!.snapshot!.boxScore, finalBoxScore);
 		assert.strictEqual(flushes, 1);
 		footballCoach.automate(7, session.sessionId, "end");
 		await footballCoach.finishBeforeClosingLeague();
+		assert.deepEqual(footballCoach.get(7)!.snapshot!.boxScore, finalBoxScore);
 		assert.strictEqual((await idb.cache.games.getAll()).length, 1);
 		assert.deepEqual(
 			(await idb.cache.teamStats.getAll())

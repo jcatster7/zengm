@@ -439,7 +439,10 @@ const ScoringSummary = memo(
 		);
 	},
 	(prevProps, nextProps) => {
-		return prevProps.count === nextProps.count;
+		return (
+			prevProps.count === nextProps.count &&
+			prevProps.events === nextProps.events
+		);
 	},
 );
 
@@ -933,26 +936,15 @@ const FieldAndDrive = ({
 	);
 };
 
-const BoxScore = ({
+export const FootballBoxScoreStats = ({
 	boxScore,
-	sportState,
 	Row,
 }: {
 	boxScore: BoxScore;
-	sportState: SportState;
 	Row: unknown;
 }) => {
-	// Historical games will have boxScore.won.name and boxScore.lost.name so use that for ordering, but live games
-	// won't. This is hacky, because the existence of this property is just a historical coincidence, and maybe it'll
-	// change in the future.
-	const liveGameSim = boxScore.won?.name === undefined;
-
 	return (
 		<div className="mb-3">
-			{liveGameSim ? (
-				<FieldAndDrive boxScore={boxScore} sportState={sportState} />
-			) : undefined}
-
 			<h2>Scoring Summary</h2>
 			<ScoringSummary
 				key={boxScore.gid}
@@ -969,6 +961,27 @@ const BoxScore = ({
 					</Fragment>
 				);
 			})}
+		</div>
+	);
+};
+
+const BoxScore = ({
+	boxScore,
+	sportState,
+	Row,
+}: {
+	boxScore: BoxScore;
+	sportState: SportState;
+	Row: unknown;
+}) => {
+	// Historical games have winner metadata; ordinary live games do not.
+	const liveGameSim = boxScore.won?.name === undefined;
+	return (
+		<div className="mb-3">
+			{liveGameSim ? (
+				<FieldAndDrive boxScore={boxScore} sportState={sportState} />
+			) : undefined}
+			<FootballBoxScoreStats boxScore={boxScore} Row={Row} />
 		</div>
 	);
 };

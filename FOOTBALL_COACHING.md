@@ -12,6 +12,12 @@ Implemented on `feat/football-interactive-sim`, based on the official
 - [x] Validate spreadsheet-to-roster matching without guessing ambiguous identities.
 - [x] Test native simulation/save compatibility and build the expanded source.
 
+## Live box score follow-up
+
+- [x] Include detached cumulative player statistics in live coaching snapshots.
+- [x] Show the usual Football GM stat tables below coaching controls during and after games.
+- [x] Verify stat updates and native saving, rebuild locally, and publish source changes.
+
 The exact spreadsheet is awaiting identification. The reference site's live
 assets are blocked by the network security filter, so visual work uses its
 documented interaction model rather than claiming verified pixel parity.
@@ -64,6 +70,13 @@ automatically at any time a decision is pending. The weekly schedule provides a
 resume link if you navigate away. The top Play menu's **Finish coached game**
 also finishes and saves the game.
 
+Scroll below the coaching workspace for the ordinary Football GM scoring summary
+and passing, rushing, receiving, blocking, kicking, punting, returns, and defense
+tables for both teams. They use the native table renderer and cumulative game
+statistics, updating after every play and remaining visible after the final.
+Player links, injuries, jersey numbers, derived averages, and column sorting
+retain their usual behavior. The capped recent-play log is not used for totals.
+
 The worker owns one native simulator and accepts only validated decisions with
 session/revision tokens. The normal Football GM pipeline saves player and team
 statistics, injuries, the box score, standings, and the schedule. League switching
@@ -110,7 +123,7 @@ SPORT=football node --run build
 
 On the development machine's Node 25 runtime, tests were run with
 `NODE_OPTIONS=--no-experimental-webstorage` to disable its incompatible native
-localStorage implementation. All 751 runnable Node tests passed; 12 upstream
+localStorage implementation. All 763 runnable Node tests passed; 12 upstream
 tests were skipped. Full lint, TypeScript, and the production build passed.
 The local server was checked against the built page, assets, and reference JSON.
 Browser tests were not run: browser automation was blocked
@@ -127,6 +140,9 @@ render tests check real roster markers and hidden ratings. A real native pipelin
 test checks one box score, player/team statistics, the correct schedule removal,
 and a league close that waits for the persistence boundary. The supplied league
 export was also validated read-only against the current native football schema.
+Live box-score tests render the native categories and calculated columns, check
+updates without recent play events, preserve the final tables, and compare every
+saved raw player statistic and team total with the final live snapshot.
 
 ## Scope and license
 

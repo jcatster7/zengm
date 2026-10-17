@@ -36,6 +36,8 @@ import type {
 	FootballCoachSnapshot,
 	FootballCoachLastCall,
 	FootballCoachLineupPlayer,
+	FootballCoachBoxScore,
+	FootballCoachBoxScoreTeam,
 } from "../../../common/footballCoach.ts";
 import {
 	FOOTBALL_COACH_CALLS,
@@ -1439,12 +1441,55 @@ class GameSim extends GameSimBase {
 			lastCall: this.lastCoachCall
 				? helpers.deepCopy(this.lastCoachCall)
 				: undefined,
+			boxScore: this.getCoachBoxScore(),
 			events: helpers.deepCopy(
 				this.playByPlay.playByPlay
 					.filter((event) => event.type !== "stat" && event.type !== "init")
 					.slice(-80),
 			),
 			playersOnField: [players(0), players(1)],
+		};
+	}
+
+	private getCoachBoxScore(): FootballCoachBoxScore {
+		const teams = this.team.map((team): FootballCoachBoxScoreTeam => ({
+			id: team.id,
+			stat: helpers.deepCopy(team.stat),
+			players: team.player.map((player) => ({
+				id: player.id,
+				name: player.name,
+				pos: player.pos,
+				stat: Object.fromEntries(
+					Object.entries(player.stat).filter(
+						(entry): entry is [string, number] =>
+							typeof entry[1] === "number" &&
+							entry[0] !== "benchTime" &&
+							entry[0] !== "courtTime" &&
+							entry[0] !== "energy",
+					),
+				),
+				jerseyNumber: (player as PlayerGameSim & { jerseyNumber?: string })
+					.jerseyNumber,
+				skills: g.get("challengeNoRatings") ? [] : [...player.skills],
+				injured: player.injured,
+				newInjury: !!player.newInjury,
+				injury: player.newInjury
+					? { type: "Injured", gamesRemaining: -1, playingThrough: false }
+					: { ...player.injury },
+			})),
+		})) as [FootballCoachBoxScoreTeam, FootballCoachBoxScoreTeam];
+		// Match native finalization: penalties can remove a score already logged.
+		const scoringSummary = this.playByPlay.scoringSummary.filter(
+			(event, index, events): event is PlayByPlayEventScore =>
+				event.type !== "removeLastScore" &&
+				events[index + 1]?.type !== "removeLastScore",
+		);
+		return {
+			season: g.get("season"),
+			teams,
+			scoringSummary: helpers.deepCopy(scoringSummary),
+			overtimes: this.overtimes,
+			neutralSite: this.neutralSite,
 		};
 	}
 

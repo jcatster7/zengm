@@ -1,5 +1,8 @@
-import type { TeamNum } from "./types.ts";
-import type { PlayByPlayEventOutput } from "../worker/core/GameSim.football/PlayByPlayLogger.ts";
+import type { PlayerInjury, TeamNum } from "./types.ts";
+import type {
+	PlayByPlayEventOutput,
+	PlayByPlayEventScore,
+} from "../worker/core/GameSim.football/PlayByPlayLogger.ts";
 import type {
 	FootballCoachCallId,
 	FootballCoachDefenseId,
@@ -58,6 +61,33 @@ export type FootballCoachLastCall = {
 	referenceSampleSize?: number;
 };
 
+export type FootballCoachBoxScorePlayer = {
+	id: number;
+	name: string;
+	pos: string;
+	/** Cumulative native game statistics, excluding temporary fatigue counters. */
+	stat: Record<string, number>;
+	jerseyNumber?: string;
+	skills: string[];
+	injured: boolean;
+	newInjury: boolean;
+	injury: PlayerInjury & { playingThrough: boolean };
+};
+
+export type FootballCoachBoxScoreTeam = {
+	id: number;
+	stat: Record<string, number | number[]> & { ptsQtrs: number[] };
+	players: FootballCoachBoxScorePlayer[];
+};
+
+export type FootballCoachBoxScore = {
+	season: number;
+	teams: [FootballCoachBoxScoreTeam, FootballCoachBoxScoreTeam];
+	scoringSummary: PlayByPlayEventScore[];
+	overtimes: number;
+	neutralSite: boolean;
+};
+
 export type FootballCoachSnapshot = {
 	gid: number;
 	stage: "play" | "clock";
@@ -92,6 +122,8 @@ export type FootballCoachSnapshot = {
 		defense: Record<FootballCoachDefenseId, FootballCoachLineupPlayer[]>;
 	};
 	lastCall?: FootballCoachLastCall;
+	/** Detached totals for the complete game, independent of the recent-event limit. */
+	boxScore?: FootballCoachBoxScore;
 	/** Recent native events, excluding the high-volume stat updates. */
 	events: PlayByPlayEventOutput[];
 	playersOnField: [

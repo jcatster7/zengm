@@ -18,6 +18,8 @@ import {
 	validateFootballCoachDecision,
 } from "../../../common/footballCoachPlaybook.ts";
 import type { FootballCoachReference } from "../../../common/footballCoachReference.ts";
+import { processStats } from "../../../common/processPlayerStats.football.ts";
+import type { PlayerStatsToProcess } from "../../../common/types.ts";
 
 export const genTwoTeams = async () => {
 	resetG();
@@ -857,6 +859,143 @@ test("coach snapshots do not expose mutable engine objects", async () => {
 	assert.notEqual(fresh.teams[0].pts, 99);
 	assert.notEqual(fresh.playersOnField[0][0]!.name, "changed");
 	assert.notDeepEqual(fresh.events, snapshot.events);
+});
+
+test("coach box scores keep cumulative native totals beyond the recent event window", async () => {
+	const game = await initGameSim();
+	game.playByPlay.active = true;
+	game.baseInjuryRate = 0;
+	const opening = game.getCoachSnapshot("play").boxScore!;
+	for (const t of [0, 1] as const) {
+		assert.lengthOf(opening.teams[t].players, game.team[t].player.length);
+		assert.isTrue(opening.teams[t].players.every((p) => p.stat.pss === 0));
+	}
+	let cappedSnapshot: FootballCoachSnapshot | undefined;
+	const random = mockSeededRandom();
+	try {
+		const result = await game.runInteractive((snapshot) => {
+			if (snapshot.events.length === 80) {
+				cappedSnapshot = snapshot;
+			}
+			return undefined;
+		});
+		assert.isDefined(cappedSnapshot);
+		const final = game.getCoachSnapshot("play").boxScore!;
+		assert.equal(final.season, g.get("season"));
+		assert.deepEqual(final.scoringSummary, result.scoringSummary);
+		for (const t of [0, 1] as const) {
+			assert.deepEqual(final.teams[t].stat, result.team[t].stat);
+			assert.isAbove(final.teams[t].stat.pss as number, 0);
+			assert.isAbove(final.teams[t].stat.rus as number, 0);
+			assert.isAtLeast(
+				final.teams[t].stat.pss as number,
+				cappedSnapshot!.boxScore!.teams[t].stat.pss as number,
+			);
+			assert.equal(opening.teams[t].stat.pss, 0);
+			for (const nativePlayer of result.team[t].player) {
+				const snapshotPlayer = final.teams[t].players.find(
+					(p) => p.id === nativePlayer.id,
+				)!;
+				assert.deepEqual(snapshotPlayer.stat, nativePlayer.stat);
+				assert.notProperty(snapshotPlayer, "compositeRating");
+				assert.notProperty(snapshotPlayer, "ovrs");
+			}
+		}
+	} finally {
+		random.mockRestore();
+	}
+});
+
+test("coach box scores feed native passing and receiving derived columns", async () => {
+	const game = await initCoachScrimmage();
+	const snapshot = await playOneCoachSnap(game, { callId: "slant" });
+	const passing = snapshot.boxScore!.teams[0].players.find(
+		(p) => p.id === snapshot.lastCall!.passerPid,
+	)!;
+	const receiving = snapshot.boxScore!.teams[0].players.find(
+		(p) => p.id === snapshot.lastCall!.targetPid,
+	)!;
+	const passingStats = processStats(
+		passing.stat as PlayerStatsToProcess,
+		["cmpPct", "pssYdsPerAtt", "qbRat"],
+		undefined,
+		() => g.get("fantasyPoints"),
+	);
+	const receivingStats = processStats(
+		receiving.stat as PlayerStatsToProcess,
+		["recCatchPct", "recYdsPerRec"],
+		undefined,
+		() => g.get("fantasyPoints"),
+	);
+	assert.equal(passingStats.cmpPct, 100);
+	assert.equal(passingStats.pssYdsPerAtt, passing.stat.pssYds);
+	assert.isTrue(Number.isFinite(passingStats.qbRat));
+	assert.equal(receivingStats.recCatchPct, 100);
+	assert.equal(receivingStats.recYdsPerRec, receiving.stat.recYds);
+});
+
+test("coach box scores detach nested statistics, skills, injuries, and scoring summaries", async () => {
+	const game = await initCoachScrimmage();
+	game.playByPlay.logEvent({
+		type: "fieldGoal",
+		clock: 8,
+		t: 0,
+		names: ["Test kicker"],
+		yds: 35,
+		made: true,
+	});
+	const snapshot = game.getCoachSnapshot("play").boxScore!;
+	snapshot.teams[0].stat.ptsQtrs[0] = 999;
+	snapshot.teams[0].stat.pss = 999;
+	snapshot.teams[0].players[0]!.stat.pss = 999;
+	snapshot.teams[0].players[0]!.skills.push("changed");
+	snapshot.teams[0].players[0]!.injury.type = "changed";
+	const copiedScore = snapshot.scoringSummary[0]!;
+	if (copiedScore.type !== "fieldGoal") {
+		throw new Error("Expected the logged field goal");
+	}
+	copiedScore.names[0] = "changed";
+	const fresh = game.getCoachSnapshot("play").boxScore!;
+	assert.notEqual(fresh.teams[0].stat.ptsQtrs[0], 999);
+	assert.equal(fresh.teams[0].stat.pss, 0);
+	assert.equal(fresh.teams[0].players[0]!.stat.pss, 0);
+	assert.notInclude(fresh.teams[0].players[0]!.skills, "changed");
+	assert.notEqual(fresh.teams[0].players[0]!.injury.type, "changed");
+	const freshScore = fresh.scoringSummary[0]!;
+	if (freshScore.type !== "fieldGoal") {
+		throw new Error("Expected the original field goal");
+	}
+	assert.equal(freshScore.names[0], "Test kicker");
+	assert.notProperty(fresh.teams[0].players[0]!.stat, "energy");
+	assert.notProperty(fresh.teams[0].players[0]!.stat, "benchTime");
+	assert.notProperty(fresh.teams[0].players[0]!.stat, "courtTime");
+	game.playByPlay.removeLastScore();
+	assert.lengthOf(game.getCoachSnapshot("play").boxScore!.scoringSummary, 0);
+});
+
+test("coach box scores show newly injured players and respect hidden ratings", async () => {
+	const game = await initCoachScrimmage();
+	game.team[0].player[0]!.newInjury = true;
+	game.team[0].player[0]!.injured = true;
+	game.team[0].player[0]!.skills = ["Pa"];
+	const previous = g.get("challengeNoRatings");
+	try {
+		g.setWithoutSavingToDB("challengeNoRatings", true);
+		const injured =
+			game.getCoachSnapshot("play").boxScore!.teams[0].players[0]!;
+		assert.isTrue(injured.injured);
+		assert.isTrue(injured.newInjury);
+		assert.deepEqual(injured.injury, {
+			type: "Injured",
+			gamesRemaining: -1,
+			playingThrough: false,
+		});
+		assert.deepEqual(injured.skills, []);
+		assert.deepEqual(game.team[0].player[0]!.skills, ["Pa"]);
+		assert.notEqual(game.team[0].player[0]!.injury.type, "Injured");
+	} finally {
+		g.setWithoutSavingToDB("challengeNoRatings", previous);
+	}
 });
 
 test("manual tempo changes only the native between-play runoff", async () => {
