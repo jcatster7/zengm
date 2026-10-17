@@ -3414,13 +3414,17 @@ class GameSim extends GameSimBase {
 					),
 		);
 
-		if (style !== "sneak" && Math.random() < 0.01) {
-			ydsRaw += randInt(0, 109);
-		}
+		// Observed rushing yards already include breakaways and tackles for loss.
+		// These corrections belong only to the native truncated-normal fallback.
+		if (referenceYards === undefined) {
+			if (style !== "sneak" && Math.random() < 0.01) {
+				ydsRaw += randInt(0, 109);
+			}
 
-		// Fewer TFL
-		if (ydsRaw < 0) {
-			ydsRaw += randInt(0, 5);
+			// Fewer TFL
+			if (ydsRaw < 0) {
+				ydsRaw += randInt(0, 5);
+			}
 		}
 
 		ydsRaw = Math.round(ydsRaw * g.get("rushYdsFactor"));

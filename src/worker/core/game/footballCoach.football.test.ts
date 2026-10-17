@@ -1,4 +1,4 @@
-import { assert, expect, test } from "vitest";
+import { assert, expect, test, vi } from "vitest";
 import type {
 	FootballCoachDecision,
 	FootballCoachSnapshot,
@@ -822,6 +822,250 @@ test("a coached native game saves one box score and normal league stats before c
 		resetG();
 	}
 });
+
+test.each([0, 1] as const)(
+	"a full game coached by team %i survives a native database disconnect and reopen",
+	async (controlledTeam) => {
+		const fakeIndexedDB = await import("fake-indexeddb");
+		const { resetCache, resetG } = await import("../../../test/helpers.ts");
+		const { DEFAULT_LEVEL } = await import("../../../common/budgetLevels.ts");
+		const { PHASE } = await import("../../../common/constants.ts");
+		const { defaultGameAttributes } =
+			await import("../../../common/defaultGameAttributes.ts");
+		const { player, team, league } = await import("../index.ts");
+		const { Cache, connectLeague, idb } = await import("../../db/index.ts");
+		const { g, helpers, local, lock } = await import("../../util/index.ts");
+		const { footballCoach } = await import("./footballCoach.ts");
+		const { default: play } = await import("./play.ts");
+		const { default: gameLog } = await import("../../views/gameLog.ts");
+		const originalLeague = idb.league;
+		const originalCache = idb.cache;
+		const lid = 71000 + controlledTeam;
+		const season = 2035;
+		let database: typeof idb.league | undefined;
+		let completion: Promise<void> | undefined;
+		try {
+			// Exercise native IndexedDB transactions in an isolated test database.
+			// This does not use the browser's database or mock Cache.flush/fill.
+			for (const [name, value] of Object.entries(fakeIndexedDB)) {
+				if (name.startsWith("IDB")) {
+					vi.stubGlobal(name, value);
+				}
+			}
+			vi.stubGlobal("indexedDB", new fakeIndexedDB.IDBFactory());
+			resetG();
+			local.reset();
+			lock.reset();
+			g.setWithoutSavingToDB("lid", lid);
+			g.setWithoutSavingToDB("season", season);
+			g.setWithoutSavingToDB("startingSeason", season);
+			g.setWithoutSavingToDB("phase", PHASE.REGULAR_SEASON);
+			g.setWithoutSavingToDB("injuryRate", 0);
+			g.setWithoutSavingToDB("userTid", controlledTeam);
+			g.setWithoutSavingToDB("userTids", [controlledTeam]);
+			g.setWithoutSavingToDB("numGamesPlayoffSeries", [1]);
+			g.setWithoutSavingToDB("numPlayoffByes", 0);
+			g.setWithoutSavingToDB("playoffsByConf", false);
+			g.setWithoutSavingToDB("numTeams", 4);
+			g.setWithoutSavingToDB("numActiveTeams", 4);
+			const teams = helpers.getTeamsDefault().slice(0, 4).map(team.generate);
+			database = await connectLeague(lid);
+			idb.league = database;
+			await resetCache(
+				{
+					players: teams.flatMap((t) =>
+						Array.from({ length: 50 }, () =>
+							player.generate(t.tid, 25, season - 3, true, DEFAULT_LEVEL),
+						),
+					),
+					teams,
+					teamSeasons: teams.map((t) => team.genSeasonRow(t)),
+					teamStats: teams.map((t) => team.genStatsRow(t.tid)),
+				},
+				{ stubFlush: false },
+			);
+			for (const key of helpers.keys(defaultGameAttributes)) {
+				await idb.cache.gameAttributes.put({ key, value: g.getRaw(key) });
+			}
+			await idb.cache.schedule.add({ gid: 42, day: 1, homeTid: 0, awayTid: 1 });
+			await idb.cache.schedule.add({ gid: 43, day: 1, homeTid: 2, awayTid: 3 });
+			await idb.cache.flush();
+			idb.cache = new Cache();
+			await idb.cache.fill(season);
+			local.leagueLoaded = true;
+			const session = footballCoach.start({
+				lid,
+				gid: 42,
+				controlledTeam,
+				teams: [teams[0]!, teams[1]!],
+			});
+			let offenseDecisions = 0;
+			let defenseDecisions = 0;
+			let clockDecisions = 0;
+			let ownTimeouts = 0;
+			const possessions = new Set<number>();
+			const quarters = new Set<number>();
+			completion = play(1, {}, true, 42, true, (snapshot) => {
+				assert.strictEqual(snapshot.controlledTeam, controlledTeam);
+				possessions.add(snapshot.offense);
+				quarters.add(snapshot.quarter);
+				const pending = footballCoach.next(lid, snapshot);
+				const current = footballCoach.get(lid)!;
+				if (current.status === "waiting") {
+					let decision: FootballCoachDecision;
+					if (snapshot.stage === "clock") {
+						clockDecisions += 1;
+						if (ownTimeouts === 0 && snapshot.canTimeout[controlledTeam]) {
+							decision = { timeout: controlledTeam };
+							ownTimeouts += 1;
+						} else {
+							decision =
+								snapshot.offense === controlledTeam ? { tempo: "hurryUp" } : {};
+						}
+					} else if (snapshot.offense === controlledTeam) {
+						offenseDecisions += 1;
+						decision = snapshot.allowedPlays.includes("run")
+							? { callId: offenseDecisions % 2 === 0 ? "slant" : "insideZone" }
+							: { play: "auto" };
+					} else {
+						defenseDecisions += 1;
+						assert.throws(
+							() =>
+								footballCoach.submit(lid, {
+									sessionId: current.sessionId,
+									revision: current.revision,
+									decision: { callId: "slant" },
+								}),
+							/own team/,
+						);
+						decision = { defenseId: "nickel" };
+					}
+					footballCoach.submit(lid, {
+						sessionId: current.sessionId,
+						revision: current.revision,
+						decision,
+					});
+				}
+				return pending;
+			}).then(() =>
+				footballCoach.complete(
+					lid,
+					`/l/${lid}/game_log/${teams[controlledTeam]!.abbrev}_${controlledTeam}/${season}/42`,
+				),
+			);
+			footballCoach.track(completion);
+			await completion;
+			assert.isAbove(offenseDecisions, 0);
+			assert.isAbove(defenseDecisions, 0);
+			assert.isAbove(clockDecisions, 0);
+			assert.strictEqual(ownTimeouts, 1);
+			assert.deepEqual([...possessions].sort(), [0, 1]);
+			assert.includeMembers([...quarters], [1, 2, 3, 4]);
+			assert.strictEqual(footballCoach.get(lid)!.status, "complete");
+			const beforeClose = {
+				game: await idb.cache.games.get(42),
+				players: await idb.cache.players.getAll(),
+				teamStats: await idb.cache.teamStats.getAll(),
+				teamSeasons: await idb.cache.teamSeasons.getAll(),
+				schedule: await idb.cache.schedule.getAll(),
+			};
+			assert.isDefined(beforeClose.game);
+			assert.deepEqual(
+				beforeClose.schedule.map((game) => game.gid),
+				[43],
+			);
+			assert.deepEqual(
+				beforeClose.teamStats.filter((row) => row.tid < 2).map((row) => row.gp),
+				[1, 1],
+			);
+			const finalStats = footballCoach.get(lid)!.snapshot!.boxScore!;
+			assert.deepEqual(
+				finalStats.scoringSummary,
+				beforeClose.game!.scoringSummary,
+			);
+			await league.close(true);
+			assert.isUndefined(g.get("lid"));
+			assert.throws(() => database!.transaction("games"));
+			helpers.resetG();
+			assert.throws(() => g.get("season"), /not already set/);
+			database = await connectLeague(lid);
+			idb.league = database;
+			g.setWithoutSavingToDB("lid", lid);
+			idb.cache = new Cache();
+			// With globals cleared, native fill discovers season from persisted data.
+			await idb.cache.fill();
+			await league.loadGameAttributes();
+			assert.strictEqual(g.get("season"), season);
+			assert.strictEqual(g.get("userTid"), controlledTeam);
+			assert.deepEqual(g.get("userTids"), [controlledTeam]);
+			assert.deepEqual(await database.get("games", 42), beforeClose.game);
+			assert.deepEqual(await idb.merged.games.get(42), beforeClose.game);
+			assert.deepEqual(await database.getAll("players"), beforeClose.players);
+			assert.deepEqual(await idb.cache.players.getAll(), beforeClose.players);
+			assert.deepEqual(
+				await database.getAll("teamStats"),
+				beforeClose.teamStats,
+			);
+			assert.deepEqual(
+				await idb.cache.teamStats.getAll(),
+				beforeClose.teamStats,
+			);
+			assert.deepEqual(
+				await database.getAll("teamSeasons"),
+				beforeClose.teamSeasons,
+			);
+			assert.deepEqual(
+				await idb.cache.teamSeasons.getAll(),
+				beforeClose.teamSeasons,
+			);
+			assert.deepEqual(await database.getAll("schedule"), beforeClose.schedule);
+			assert.deepEqual(await idb.cache.schedule.getAll(), beforeClose.schedule);
+			const view = await gameLog.load({
+				inputs: {
+					gid: 42,
+					season,
+					tid: controlledTeam,
+					abbrev: teams[controlledTeam]!.abbrev,
+				},
+				updateEvents: new Set(["firstRun"]),
+				prevInputs: undefined,
+				prevOutput: {},
+				conditions: {},
+			});
+			expect(view.boxScore).toMatchObject({
+				gid: 42,
+				season,
+				scoringSummary: finalStats.scoringSummary,
+				teams: finalStats.teams.map((t) => ({ tid: t.id, pts: t.stat.pts })),
+			});
+			await footballCoach.finishBeforeClosingLeague();
+			await idb.cache.flush();
+			assert.strictEqual((await database.getAll("games")).length, 1);
+			assert.deepEqual(
+				await database.getAll("teamStats"),
+				beforeClose.teamStats,
+			);
+			assert.deepEqual(footballCoach.get(lid)!.snapshot!.boxScore, finalStats);
+			assert.strictEqual(footballCoach.get(lid)!.sessionId, session.sessionId);
+		} finally {
+			if (footballCoach.isActive()) {
+				footballCoach.fail(lid, new Error("test cleanup"));
+			}
+			if (completion) {
+				await completion.catch(() => {});
+			}
+			footballCoach.complete(lid, "/test-cleanup");
+			idb.cache.stopAutoFlush();
+			database?.close();
+			idb.league = originalLeague;
+			idb.cache = originalCache;
+			vi.unstubAllGlobals();
+			local.reset();
+			lock.reset();
+			resetG();
+		}
+	},
+);
 
 test("native quick and recursive simulation entrypoints honor recovery protection", async () => {
 	const { footballCoach } = await import("./footballCoach.ts");

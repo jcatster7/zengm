@@ -18,9 +18,19 @@ Implemented on `feat/football-interactive-sim`, based on the official
 - [x] Show the usual Football GM stat tables below coaching controls during and after games.
 - [x] Verify stat updates and native saving, rebuild locally, and publish source changes.
 
-The exact spreadsheet is awaiting identification. The reference site's live
-assets are blocked by the network security filter, so visual work uses its
-documented interaction model rather than claiming verified pixel parity.
+## Acceptance and compatibility follow-up
+
+- [x] Verify a complete coached game in Chrome: club ownership, possession changes, timeouts, live tables, and saved results after reopening.
+- [x] Verify overtime in Chrome and durable database reopening through native integration tests.
+- [x] Run four representative local league exports through native import components, team loading, and complete game simulation.
+- [x] Identify the requested data source: the Week 5 v25 native league export.
+- [ ] Finish the Week 5 export's browser import and full-game acceptance test.
+- [x] Compare observable reference behavior and empirical rushing distributions; document remaining fidelity gaps.
+
+The Week 5 file is identified below. Chrome's extension currently requires
+"Allow access to file URLs" before its file chooser can select the local export.
+The completed Chrome games use a separate generated test league; they do not
+establish that the Week 5 browser import has passed.
 
 ## Run privately
 
@@ -108,8 +118,15 @@ are serialized in an IndexedDB transaction. Player names and league files are
 not uploaded to the reference site or a matching service.
 
 This bridge joins player identities; it does not overwrite league ratings or
-synchronize workbook formulas. The particular spreadsheet still needs its name
-or link before a direct connection can be configured. See
+synchronize workbook formulas. Justin identified the requested data source as
+`2026 Week 5 NFL Real Players - Postgame v25.0.json.gz`, rather than a spreadsheet.
+Use the native custom-league importer for its rosters, ratings, depth charts,
+injuries, and league configuration. The inspected file contains 4,128 players,
+57 team records (32 active), and 327 injury entries. Its current season is 2026;
+the release name does not mean real Week 5 results have been imported.
+The read-only source's SHA-256 is
+`dc751cbfea499fdade9699168d9f6b6c85b7c120dd7abe13c35ced007703d329`.
+See
 [public data provenance and licenses](data/football-coach-reference.README.md).
 
 ## Verification
@@ -123,12 +140,11 @@ SPORT=football node --run build
 
 On the development machine's Node 25 runtime, tests were run with
 `NODE_OPTIONS=--no-experimental-webstorage` to disable its incompatible native
-localStorage implementation. All 763 runnable Node tests passed; 12 upstream
-tests were skipped. Full lint, TypeScript, and the production build passed.
-The local server was checked against the built page, assets, and reference JSON.
-Browser tests were not run: browser automation was blocked
-by approval verification. The interface still needs a manual browser acceptance
-pass; this is not a claim of perfect compatibility with every league export.
+localStorage implementation. The latest three-project Node suite passed 692
+tests with 13 skipped (including the opt-in local-export test when no paths are
+provided), across 74 passing files and two skipped files. Full lint, TypeScript,
+and production build `2026.10.17.0859` passed. This is not a claim of perfect
+compatibility with every league export.
 
 Coverage checks exact seeded automatic/native result parity, every tactical call,
 formations, target/carrier selection, halfback passing stats, routes, defensive
@@ -144,15 +160,91 @@ Live box-score tests render the native categories and calculated columns, check
 updates without recent play events, preserve the final tables, and compare every
 saved raw player statistic and team total with the final live snapshot.
 
+Two additional full-game tests coach home and away independently through the
+normal game/save pipeline. They flush real native Cache transactions into
+isolated fake-indexeddb databases, close the league, clear globals, reconnect,
+and reload the native Game Log. They compare the entire saved game, all 200
+player records, team stats, standings, and schedule before and after reconnect.
+The isolated database implementation is distinct from the Chrome evidence below.
+
+### Chrome acceptance
+
+In the isolated generated league **Coaching verification — generated roster**,
+a full four-quarter home game finished ATL 31–SF 21. Only SF offense, defense,
+and timeouts were controllable. A timeout reduced SF's count while leaving
+Atlanta's unchanged; punts and turnovers switched to SF defensive controls.
+All eight native player-stat categories remained available below the field.
+After switching leagues, reloading Chrome, and reopening the saved box score,
+all displayed cells across 69 player rows and the scoring summary matched the
+final live tables. Comparisons use player identity within each category because
+rows tied on the sorted statistic can change order after saving.
+
+A second game placed SF away at SEA with one-minute regulation and overtime
+periods. It reached OT1, reset each team's timeouts to two, retained SF-only
+controls, allowed the opponent's own timeout decisions, and saved a 0–0 final.
+The test league's period lengths were restored to 15/10 minutes and checked
+after reload. Chrome reported no warning/error console entries. These browser
+runs used build `2026.10.16.1358`, before the empirical rushing correction below;
+they establish the existing controls and persistence behavior.
+
+### Local-export compatibility
+
+`footballCoachCompatibility.football.test.ts` accepts a JSON array of absolute
+paths in `FOOTBALL_COACH_COMPATIBILITY_FILES`. It reads and hashes each export,
+uses the native initial upload/schema inspection, gzip/stream parsing,
+game-attribute and player normalization, native depth loading, and complete
+automatic and home/away tactical simulations. Tactical games load the bundled
+reference and assert that empirical profiles are actually sampled.
+It checks exact seeded automatic-versus-interactive-auto parity, ownership,
+finite statistics, unavailable injured players, and unchanged source hashes.
+No user export data is copied into the repository.
+
+The four inspected files cover the v3 recalibrated roster, v12 historical leader
+records, a position-locked roster, and Week 5 v25. Together they normalize 13,548
+players and load 128 active teams. All four had zero upload schema errors.
+Sixteen full games passed. The Week 5 matchup
+included 17 unavailable injured players; none participated. All four exports
+are version 72 with current season 2026; historical player records alone do not
+establish compatibility with a historical starting season.
+
+Three separate generated fixtures add a real 1965 starting/current season,
+fictional custom clubs with only IDs 2 and 5 active among six valid team slots,
+and two seven-minute periods with user/AI play-through injury policies. Their
+400 fictional players, eight team loads, and twelve complete games also passed,
+with zero upload schema errors. These are software fixtures, not real historical
+rosters or evidence of era-authentic rules. All seven scenarios preserve exact
+automatic-versus-interactive-auto results. The harness tests native import
+components, not the complete browser upload/database migration.
+
+### Reference comparison and rushing correction
+
+The rendered [reference game](https://nfl2mindrill.com/) was inspected in Chrome,
+including its Run/Pass/RPO/Trick categories and passing panel. Both applications
+use a vertical field beside a playbook, personnel selection, roster markers,
+and play-by-play. The fork retains Football GM's navigation and native stat
+tables. The reference additionally exposes receiver-specific route/target
+choices with projected catch rates, play-action/rollout toggles, out-of-bounds
+intent, field zoom, and animation speed. The fork's selected-target route and
+schematic formation do not reproduce that entire interaction or hidden model.
+There is no verified pixel or probability parity.
+
+Validation found that the native extra breakaway and negative-yard corrections
+were being applied on top of measured rushing outcomes, even though those
+observed distributions already contain long gains and tackles for loss. Those
+two corrections now apply only to the native fallback. Matchup effects, league
+yardage factors, field limits, penalties, and fumbles still apply normally.
+Nine regression tests verify every observed yard value at a neutral matchup,
+50,000 weighted samples against the source mean/loss/20-yard rates, and unchanged
+seeded native fallbacks. This verifies sampling integrity, not held-out
+full-game NFL calibration or equivalence to the reference's proprietary engine.
+
 ## Scope and license
 
 This is a source-level Football GM integration inspired by play-calling games.
 It does not contain the proprietary Two-Minute Drill engine, its assets, or an
 exact reconstruction of its probabilities. Tactical route/personnel/defense
 controls extend the native simulation; direct player movement is not implemented.
-The reference site's live assets were blocked by the network security filter,
-so exact visual parity could not be verified. Custom league shootouts remain
-automatic and their scores are displayed.
+Custom league shootouts remain automatic and their scores are displayed.
 
 The existing [license](LICENSE.md) permits private local play and source sharing.
 It prohibits publishing a playable fork for other users. Keep this application

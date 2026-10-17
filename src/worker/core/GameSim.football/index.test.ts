@@ -68,6 +68,18 @@ const mockSeededRandom = () => {
 
 const initCoachScrimmage = async () => {
 	const game = await initGameSim();
+	// Random roster generation can omit a natural RB or WR entirely. These
+	// tactical fixtures require both roles; preserve generated ratings and depth.
+	for (const t of game.team) {
+		for (const pos of ["RB", "WR"] as const) {
+			if (!t.player.some((p) => p.pos === pos)) {
+				const otherPos = pos === "RB" ? "WR" : "RB";
+				const replacement =
+					t.depth[pos].find((p) => p.pos !== otherPos) ?? t.depth[pos][0]!;
+				replacement.pos = pos;
+			}
+		}
+	}
 	game.awaitingKickoff = undefined;
 	game.o = 0;
 	game.d = 1;
