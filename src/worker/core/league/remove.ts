@@ -9,6 +9,7 @@ const remove = async (lid: number) => {
 	}
 
 	await idb.meta.delete("leagues", lid);
+	await idb.meta.delete("attributes", `footballCoachLinks:${lid}`);
 	await deleteDB(`league${lid}`, {
 		blocked() {
 			logEvent({

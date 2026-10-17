@@ -242,6 +242,12 @@ export type PlayByPlayEventInput =
 			yds: number;
 	  }
 	| {
+			type: "spike";
+			clock: number;
+			names: string[];
+			t: TeamNum;
+	  }
+	| {
 			type: "flag";
 			clock: number;
 	  }

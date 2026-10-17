@@ -481,6 +481,8 @@ export const getText = (event: PlayByPlayEventOutput, numPeriods: number) => {
 		text = "Two minute warning";
 	} else if (event.type === "kneel") {
 		text = `${event.names[0]} kneels`;
+	} else if (event.type === "spike") {
+		text = `${event.names[0]} spikes the ball`;
 	} else if (event.type === "flag") {
 		text = (
 			<>
@@ -1005,7 +1007,8 @@ const processLiveGameEvents = ({
 			} else if (
 				e.type === "dropback" ||
 				e.type === "handoff" ||
-				e.type === "kneel"
+				e.type === "kneel" ||
+				e.type === "spike"
 			) {
 				if (!sportState.awaitingAfterTouchdown) {
 					play.countsTowardsNumPlays = true;

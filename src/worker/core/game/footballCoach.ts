@@ -3,6 +3,7 @@ import type {
 	FootballCoachSnapshot,
 } from "../../../common/footballCoach.ts";
 import type { FootballCoachSession } from "../../../common/footballCoachSession.ts";
+import { validateFootballCoachDecision } from "../../../common/footballCoachPlaybook.ts";
 
 // Only this worker owns the live native simulator. The UI gets detached snapshots
 // and submits a revision token, never a replacement score, roster, or game result.
@@ -32,13 +33,23 @@ export class FootballCoachController {
 		return this.session?.lid === lid ? structuredClone(this.session) : null;
 	}
 
-	start(input: Pick<FootballCoachSession, "lid" | "gid" | "teams">) {
+	start(
+		input: Pick<
+			FootballCoachSession,
+			"lid" | "gid" | "teams" | "rosters" | "controlledTeam"
+		>,
+	) {
 		this.assertCanSimulate(input.lid);
+		if (input.controlledTeam !== 0 && input.controlledTeam !== 1) {
+			throw new Error("Choose your team before starting a coached game.");
+		}
 		if (this.isActive()) {
 			throw new Error("Finish the current coached game first.");
 		}
 		this.session = {
 			...structuredClone(input),
+			controlledTeam: input.controlledTeam,
+			controlledTid: input.teams[input.controlledTeam].tid,
 			sessionId: crypto.randomUUID(),
 			revision: 0,
 			status: "starting",
@@ -52,6 +63,15 @@ export class FootballCoachController {
 
 	track(completion: Promise<void>) {
 		this.completion = completion;
+	}
+
+	setReference(
+		lid: number,
+		reference: NonNullable<FootballCoachSession["reference"]>,
+	) {
+		if (this.session?.lid === lid) {
+			this.session.reference = structuredClone(reference);
+		}
 	}
 
 	private requireSession(lid: number, sessionId: string) {
@@ -97,7 +117,23 @@ export class FootballCoachController {
 			}
 			this.automaticUntil = undefined;
 		}
-		session.snapshot = structuredClone(snapshot);
+		// The league's chosen club is captured when the game starts. UI payloads
+		// cannot change ownership, even after a possession change or a refresh.
+		if (snapshot.offense !== session.controlledTeam) {
+			if (snapshot.stage === "play" && !snapshot.allowedPlays.includes("run")) {
+				return;
+			}
+			if (
+				snapshot.stage === "clock" &&
+				!snapshot.canTimeout[session.controlledTeam]
+			) {
+				return;
+			}
+		}
+		session.snapshot = {
+			...structuredClone(snapshot),
+			controlledTeam: session.controlledTeam,
+		};
 		session.revision += 1;
 		session.status = "waiting";
 		return await new Promise((resolve) => {
@@ -125,39 +161,10 @@ export class FootballCoachController {
 		}
 		const snapshot = session.snapshot!;
 		const decision = input.decision;
-		if (
-			!decision ||
-			typeof decision !== "object" ||
-			Array.isArray(decision) ||
-			Object.keys(decision).some(
-				(key) => !["play", "timeout", "tempo"].includes(key),
-			)
-		) {
+		if (decision === undefined) {
 			throw new Error("Invalid coaching decision.");
 		}
-		if (
-			decision.play !== undefined &&
-			(snapshot.stage !== "play" ||
-				(decision.play !== "auto" &&
-					!snapshot.allowedPlays.includes(decision.play)))
-		) {
-			throw new Error("That play is unavailable in this situation.");
-		}
-		if (
-			decision.timeout !== undefined &&
-			(snapshot.stage !== "clock" ||
-				(decision.timeout !== 0 && decision.timeout !== 1) ||
-				!snapshot.canTimeout[decision.timeout])
-		) {
-			throw new Error("That team cannot call a timeout now.");
-		}
-		if (
-			decision.tempo !== undefined &&
-			(snapshot.stage !== "clock" ||
-				!["normal", "hurryUp", "chewClock"].includes(decision.tempo))
-		) {
-			throw new Error("Invalid tempo.");
-		}
+		validateFootballCoachDecision(decision, snapshot);
 		const resolve = this.resolveDecision;
 		this.resolveDecision = undefined;
 		session.status = "running";
@@ -200,7 +207,10 @@ export class FootballCoachController {
 				"The final game does not match the active coaching session.",
 			);
 		}
-		this.session.snapshot = structuredClone(snapshot);
+		this.session.snapshot = {
+			...structuredClone(snapshot),
+			controlledTeam: this.session.controlledTeam,
+		};
 		this.session.revision += 1;
 	}
 

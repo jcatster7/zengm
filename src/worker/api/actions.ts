@@ -1,5 +1,5 @@
-import { PHASE } from "../../common/constants.ts";
-import { draft, game, season, trade } from "../core/index.ts";
+import { PHASE, RATINGS } from "../../common/constants.ts";
+import { draft, game, player, season, trade } from "../core/index.ts";
 import { idb } from "../db/index.ts";
 import {
 	g,
@@ -11,8 +11,17 @@ import {
 } from "../util/index.ts";
 import type { Conditions, TradeTeams } from "../../common/types.ts";
 import type { FootballCoachDecision } from "../../common/footballCoach.ts";
-import type { FootballCoachTeam } from "../../common/footballCoachSession.ts";
+import type {
+	FootballCoachTeam,
+	FootballCoachRosterPlayer,
+} from "../../common/footballCoachSession.ts";
 import { footballCoach } from "../core/game/footballCoach.ts";
+import { loadFootballCoachReference } from "../core/game/footballCoachReference.ts";
+import {
+	validateFootballCoachLinks,
+	type FootballCoachLinkFile,
+	type FootballCoachPlayerLink,
+} from "../../common/footballCoachData.ts";
 
 type TradeForOptions = {
 	dpid?: number;
@@ -218,6 +227,7 @@ const interactiveGame = async (gid: number, conditions: Conditions) => {
 	}
 	const lid = g.get("lid");
 	const seasonNumber = g.get("season");
+	const controlledTid = g.get("userTid");
 	let reserved = false;
 	let started = false;
 	try {
@@ -232,6 +242,16 @@ const interactiveGame = async (gid: number, conditions: Conditions) => {
 				"Choose a normal matchup from the current week's schedule.",
 			);
 		}
+		if (
+			g.get("spectator") ||
+			(scheduled.homeTid !== controlledTid &&
+				scheduled.awayTid !== controlledTid)
+		) {
+			throw new Error(
+				"You can only coach the team selected in your league. Use Watch game or Quick sim for other matchups.",
+			);
+		}
+		const controlledTeam = scheduled.homeTid === controlledTid ? 0 : 1;
 		if (scheduled.forceWin !== undefined) {
 			throw new Error(
 				"Clear Force win before calling plays. Quick sim still supports forced results.",
@@ -256,8 +276,48 @@ const interactiveGame = async (gid: number, conditions: Conditions) => {
 			getCoachTeam(scheduled.homeTid),
 			getCoachTeam(scheduled.awayTid),
 		]);
+		const getCoachRoster = async (
+			tid: number,
+			abbrev: string,
+		): Promise<FootballCoachRosterPlayer[]> => {
+			const players = await idb.cache.players.indexGetAll("playersByTid", tid);
+			return players.map((p) => {
+				const ratings = p.ratings.at(-1)!;
+				return {
+					pid: p.pid,
+					name: `${p.firstName} ${p.lastName}`,
+					pos: ratings.pos,
+					team: abbrev,
+					birthYear: p.born.year,
+					jerseyNumber: p.stats.at(-1)?.jerseyNumber ?? p.jerseyNumber,
+					injury: p.injury.gamesRemaining > 0 ? p.injury.type : undefined,
+					...(!g.get("challengeNoRatings")
+						? {
+								ovr: player.fuzzRating(ratings.ovr, ratings.fuzz),
+								ratings: Object.fromEntries(
+									Object.entries(ratings)
+										.filter(
+											([key, value]) =>
+												(RATINGS as readonly string[]).includes(key) &&
+												typeof value === "number",
+										)
+										.map(([key, value]) => [
+											key,
+											player.fuzzRating(value as number, ratings.fuzz),
+										]),
+								),
+							}
+						: {}),
+				};
+			});
+		};
+		const rosters = await Promise.all([
+			getCoachRoster(teams[0].tid, teams[0].abbrev),
+			getCoachRoster(teams[1].tid, teams[1].abbrev),
+		]);
 		if (
 			g.get("lid") !== lid ||
+			g.get("userTid") !== controlledTid ||
 			g.get("season") !== seasonNumber ||
 			g.get("phase") !== phase
 		) {
@@ -271,7 +331,7 @@ const interactiveGame = async (gid: number, conditions: Conditions) => {
 			throw new Error("Another simulation is already running.");
 		}
 		reserved = true;
-		footballCoach.start({ lid, gid, teams });
+		footballCoach.start({ lid, gid, teams, rosters, controlledTeam });
 		started = true;
 		// Keep one continuation through the existing native result-saving path.
 		// No submit/finalize endpoint accepts a client-generated score or stats.
@@ -330,6 +390,93 @@ const interactiveGame = async (gid: number, conditions: Conditions) => {
 };
 
 const getFootballCoach = () => footballCoach.get(g.get("lid"));
+const getFootballCoachReference = () => loadFootballCoachReference();
+const parseFootballCoachLinks = (
+	saved: unknown,
+): FootballCoachLinkFile | null => {
+	if (typeof saved !== "string") {
+		return null;
+	}
+	try {
+		const parsed = JSON.parse(saved) as FootballCoachLinkFile | null;
+		return parsed?.version === 1 && Array.isArray(parsed.links) ? parsed : null;
+	} catch {
+		return null;
+	}
+};
+const getFootballCoachLinks =
+	async (): Promise<FootballCoachLinkFile | null> => {
+		const saved = await idb.meta.get(
+			"attributes",
+			`footballCoachLinks:${g.get("lid")}`,
+		);
+		return parseFootballCoachLinks(saved);
+	};
+const saveFootballCoachLinks = async (input: {
+	sessionId: string;
+	filename: string;
+	links: FootballCoachPlayerLink[];
+}) => {
+	const lid = g.get("lid");
+	const session = footballCoach.get(lid);
+	if (!session || session.sessionId !== input.sessionId) {
+		throw new Error("Open this game's data panel again before saving links.");
+	}
+	const reference = await loadFootballCoachReference();
+	const assertCurrentSession = () => {
+		if (
+			g.get("lid") !== lid ||
+			footballCoach.get(lid)?.sessionId !== input.sessionId
+		) {
+			throw new Error(
+				"The game or league changed before player links were saved.",
+			);
+		}
+	};
+	assertCurrentSession();
+	const links = validateFootballCoachLinks(
+		input.links,
+		session.rosters?.flat() ?? [],
+		reference.players,
+	);
+	// One read/write transaction serializes concurrent imports, so neither can
+	// overwrite a successful import based on an older snapshot of saved links.
+	const transaction = await idb.meta.transaction("attributes", "readwrite");
+	try {
+		const previous = parseFootballCoachLinks(
+			await transaction.store.get(`footballCoachLinks:${lid}`),
+		);
+		assertCurrentSession();
+		const replace = new Set(links.map((link) => link.pid));
+		const replaceGsis = new Set(links.map((link) => link.gsisId));
+		const file: FootballCoachLinkFile = {
+			version: 1,
+			filename: String(input.filename).slice(0, 180),
+			updatedAt: new Date().toISOString(),
+			links: [
+				...(previous?.links ?? []).filter(
+					(link) =>
+						link && !replace.has(link.pid) && !replaceGsis.has(link.gsisId),
+				),
+				...links,
+			],
+		};
+		await transaction.store.put(
+			JSON.stringify(file),
+			`footballCoachLinks:${lid}`,
+		);
+		await transaction.done;
+		return file;
+	} catch (error) {
+		try {
+			transaction.abort();
+		} catch {
+			/* A failed transaction may already be closed. */
+		}
+		await transaction.done.catch(() => {});
+		throw error;
+	}
+};
 const submitFootballCoach = (input: {
 	sessionId: string;
 	revision: number;
@@ -361,6 +508,9 @@ export default {
 	liveGame,
 	interactiveGame,
 	getFootballCoach,
+	getFootballCoachReference,
+	getFootballCoachLinks,
+	saveFootballCoachLinks,
 	submitFootballCoach,
 	finishFootballCoach,
 	skipFootballCoach,

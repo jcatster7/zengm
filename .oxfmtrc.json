@@ -4,6 +4,7 @@
 	"printWidth": 80,
 	"sortPackageJson": false,
 	"ignorePatterns": [
+		"public/files/football-coach-reference.json",
 		"data/real-player-*.json",
 		"**/realSchedules*.json",
 		"CLA-*.md"

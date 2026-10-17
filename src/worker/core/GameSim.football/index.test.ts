@@ -11,6 +11,13 @@ import type {
 	FootballCoachDecision,
 	FootballCoachSnapshot,
 } from "../../../common/footballCoach.ts";
+import {
+	FOOTBALL_COACH_CALLS,
+	FOOTBALL_COACH_DEFENSES,
+	FOOTBALL_COACH_PERSONNEL,
+	validateFootballCoachDecision,
+} from "../../../common/footballCoachPlaybook.ts";
+import type { FootballCoachReference } from "../../../common/footballCoachReference.ts";
 
 export const genTwoTeams = async () => {
 	resetG();
@@ -56,6 +63,617 @@ const mockSeededRandom = () => {
 		return seed / 2 ** 32;
 	});
 };
+
+const initCoachScrimmage = async () => {
+	const game = await initGameSim();
+	game.awaitingKickoff = undefined;
+	game.o = 0;
+	game.d = 1;
+	game.clock = 10;
+	game.scrimmage = 30;
+	game.playByPlay.active = true;
+	game.baseInjuryRate = 0;
+	game.setCoachTeam(0);
+	game.checkPenalties = () => false;
+	game.probFumble = () => 0;
+	game.probSack = () => 0;
+	game.probScramble = () => 0;
+	game.probInt = () => 0;
+	game.probComplete = () => 1;
+	return game;
+};
+
+const playOneCoachSnap = async (
+	game: GameSim,
+	decision: FootballCoachDecision,
+) => {
+	let submitted = false;
+	const random = mockSeededRandom();
+	try {
+		await expect(
+			game.runInteractive((snapshot) => {
+				if (snapshot.stage === "clock") {
+					return {};
+				}
+				if (submitted) {
+					throw new Error("one coached snap complete");
+				}
+				submitted = true;
+				return decision;
+			}),
+		).rejects.toThrow("one coached snap complete");
+		return game.getCoachSnapshot("play");
+	} finally {
+		random.mockRestore();
+	}
+};
+
+test.each(FOOTBALL_COACH_CALLS)(
+	"$name resolves through native plays and statistics",
+	async (call) => {
+		const game = await initCoachScrimmage();
+		const snapshot = await playOneCoachSnap(game, { callId: call.id });
+		assert.equal(snapshot.lastCall?.callId, call.id);
+		assert.equal(game.team[0].stat.pss + game.team[0].stat.rus, 1);
+		for (const t of [0, 1] as const) {
+			assert.equal(snapshot.playersOnField[t].length, 11);
+			assert.equal(
+				new Set(snapshot.playersOnField[t].map((p) => p.id)).size,
+				11,
+			);
+		}
+		for (const [position, count] of Object.entries(
+			FOOTBALL_COACH_PERSONNEL[call.formation].positions,
+		)) {
+			assert.lengthOf(game.playersOnField[0][position as "QB"]!, count);
+		}
+		assert.isTrue(
+			snapshot.events.some(
+				(event) => event.type === "run" || event.type === "passComplete",
+			),
+		);
+	},
+);
+
+test("formation previews are detached, unique, and consume no simulation randomness", async () => {
+	const game = await initCoachScrimmage();
+	const random = vi.spyOn(Math, "random");
+	try {
+		const snapshot = game.getCoachSnapshot("play");
+		assert.equal(random.mock.calls.length, 0);
+		for (const lineup of [
+			...Object.values(snapshot.lineups!.offense),
+			...Object.values(snapshot.lineups!.defense),
+		]) {
+			assert.equal(lineup.length, 11);
+			assert.equal(new Set(lineup.map((p) => p.id)).size, 11);
+		}
+		snapshot.lineups!.offense["11"][0]!.name = "changed";
+		assert.notEqual(
+			game.getCoachSnapshot("play").lineups!.offense["11"][0]!.name,
+			"changed",
+		);
+	} finally {
+		random.mockRestore();
+	}
+});
+
+test("a selected bench receiver is pinned into the formation and receives the native target", async () => {
+	const game = await initCoachScrimmage();
+	const target = game
+		.getCoachSnapshot("play")
+		.eligibleReceivers!.filter((p) => p.pos === "WR")
+		.at(-1)!;
+	const snapshot = await playOneCoachSnap(game, {
+		callId: "slant",
+		targetPid: target.id,
+	});
+	const actual = game.team[0].player.find((p) => p.id === target.id)!;
+	assert.equal(actual.stat.tgt, 1);
+	assert.equal(actual.stat.rec, 1);
+	assert.equal(
+		game.team[0].player
+			.filter((p) => p.id !== target.id)
+			.reduce((sum, p) => sum + p.stat.tgt, 0),
+		0,
+	);
+	assert.include(
+		snapshot.playersOnField[0].map((p) => p.id),
+		target.id,
+	);
+	assert.equal(snapshot.lastCall?.targetPid, target.id);
+});
+
+test("a selected running back gets the native carry and rushing yardage", async () => {
+	const game = await initCoachScrimmage();
+	const runner = game
+		.getCoachSnapshot("play")
+		.eligibleRushers!.filter((p) => p.pos === "RB")
+		.at(-1)!;
+	const snapshot = await playOneCoachSnap(game, {
+		callId: "insideZone",
+		runnerPid: runner.id,
+	});
+	const actual = game.team[0].player.find((p) => p.id === runner.id)!;
+	assert.equal(actual.stat.rus, 1);
+	assert.equal(actual.stat.rusYds, game.team[0].stat.rusYds);
+	assert.equal(snapshot.lastCall?.runnerPid, runner.id);
+});
+
+test("halfback pass assigns pass statistics to the actual running back passer", async () => {
+	const game = await initCoachScrimmage();
+	const snapshot = await playOneCoachSnap(game, { callId: "halfbackPass" });
+	const passer = game.team[0].player.find(
+		(p) => p.id === snapshot.lastCall!.passerPid,
+	)!;
+	assert.include(game.playersOnField[0].RB!, passer);
+	assert.equal(passer.stat.pss, 1);
+	assert.equal(passer.stat.pssCmp, 1);
+	assert.equal(game.playersOnField[0].QB![0]!.stat.pss, 0);
+	assert.equal(passer.stat.pba, 0);
+});
+
+test("route depth changes yards, completion difficulty, and protection exposure", async () => {
+	const results: { yds: number; sack: number; complete: number }[] = [];
+	for (const route of ["hitch", "go"] as const) {
+		const game = await initCoachScrimmage();
+		const snapshot = await playOneCoachSnap(game, { callId: "slant", route });
+		const qb = game.team[0].player.find(
+			(p) => p.id === snapshot.lastCall!.passerPid,
+		)!;
+		const target = game.team[0].player.find(
+			(p) => p.id === snapshot.lastCall!.targetPid,
+		)!;
+		const defender = game.playersOnField[1].CB![0]!;
+		results.push({
+			yds: game.team[0].stat.pssYds,
+			sack: GameSim.prototype.probSack.call(game, qb),
+			complete: GameSim.prototype.probComplete.call(game, qb, target, defender),
+		});
+	}
+	assert.isAbove(results[1]!.yds, results[0]!.yds);
+	assert.isAbove(results[1]!.sack, results[0]!.sack);
+	assert.isAtMost(results[1]!.complete, results[0]!.complete);
+});
+
+test.each(FOOTBALL_COACH_DEFENSES)(
+	"$name uses its actual personnel and rusher/coverage assignments",
+	async (defense) => {
+		const game = await initCoachScrimmage();
+		game.setCoachTeam(1);
+		const automatic = vi.spyOn(game, "getPlayType").mockReturnValue("pass");
+		const snapshot = await playOneCoachSnap(game, { defenseId: defense.id });
+		assert.equal(automatic.mock.calls.length, 1);
+		assert.equal(snapshot.lastCall?.defenseId, defense.id);
+		assert.lengthOf(snapshot.lastCall!.rusherPids!, defense.rushers);
+		assert.lengthOf(snapshot.lastCall!.coveragePids!, 11 - defense.rushers);
+		assert.equal(
+			new Set([
+				...snapshot.lastCall!.rusherPids!,
+				...snapshot.lastCall!.coveragePids!,
+			]).size,
+			11,
+		);
+		for (const [position, count] of Object.entries(defense.positions)) {
+			assert.lengthOf(game.playersOnField[1][position as "DL"]!, count);
+		}
+	},
+);
+
+test("blitz pressure changes the native sack and interception inputs", async () => {
+	const pressures: number[] = [];
+	const coverages: number[] = [];
+	for (const defenseId of ["base34", "blitz"] as const) {
+		const game = await initCoachScrimmage();
+		game.setCoachTeam(1);
+		game.getPlayType = () => "pass";
+		await playOneCoachSnap(game, { defenseId });
+		pressures.push(game.team[1].compositeRating.passRushing);
+		coverages.push(game.team[1].compositeRating.passCoverage);
+	}
+	assert.isAbove(pressures[1]!, pressures[0]!);
+	assert.isBelow(coverages[1]!, coverages[0]!);
+});
+
+test("a spike consumes a down and two seconds, stops the clock, and credits no receiver", async () => {
+	const game = await initCoachScrimmage();
+	game.isClockRunning = true;
+	const snapshot = await playOneCoachSnap(game, { play: "spike" });
+	assert.equal(snapshot.down, 2);
+	assert.closeTo(snapshot.clock, 10 - 2 / 60, 1e-10);
+	assert.equal(snapshot.scrimmage, 30);
+	assert.isFalse(snapshot.isClockRunning);
+	assert.equal(game.team[0].stat.pss, 1);
+	assert.equal(game.team[0].stat.pssCmp, 0);
+	assert.equal(
+		game.team[0].player.reduce((sum, p) => sum + p.stat.tgt, 0),
+		0,
+	);
+	assert.isTrue(snapshot.events.some((event) => event.type === "spike"));
+});
+
+test("fourth-down spike turns possession over through the native play state", async () => {
+	const game = await initCoachScrimmage();
+	game.down = 4;
+	const snapshot = await playOneCoachSnap(game, { play: "spike" });
+	assert.equal(snapshot.offense, 1);
+	assert.equal(snapshot.down, 1);
+	assert.equal(snapshot.scrimmage, 70);
+});
+
+test("spikes and tactical calls are rejected at kickoff, conversion, or no remaining time", async () => {
+	const game = await initCoachScrimmage();
+	game.clock = 0;
+	assert.throws(() =>
+		game.validateCoachDecision(
+			{ play: "spike" },
+			game.getCoachSnapshot("play"),
+		),
+	);
+	for (const state of ["kickoff", "conversion"] as const) {
+		game.clock = 10;
+		game.awaitingKickoff = state === "kickoff" ? 0 : undefined;
+		game.awaitingAfterTouchdown = state === "conversion";
+		for (const decision of [{ play: "spike" }, { callId: "slant" }] as const) {
+			assert.throws(() =>
+				game.validateCoachDecision(decision, game.getCoachSnapshot("play")),
+			);
+		}
+	}
+});
+
+test("ownership rejects every offensive override when the opponent has possession", async () => {
+	const game = await initCoachScrimmage();
+	game.setCoachTeam(1);
+	const snapshot = game.getCoachSnapshot("play");
+	for (const decision of [
+		{ play: "run" },
+		{ play: "spike" },
+		{ callId: "slant" },
+		{ targetPid: 0 },
+		{ runnerPid: 0 },
+		{ route: "go" },
+	] as const) {
+		assert.throws(
+			() => validateFootballCoachDecision(decision, snapshot),
+			/own team/,
+		);
+	}
+	assert.doesNotThrow(() =>
+		validateFootballCoachDecision({ defenseId: "blitz" }, snapshot),
+	);
+	assert.doesNotThrow(() =>
+		validateFootballCoachDecision({ play: "auto" }, snapshot),
+	);
+	assert.doesNotThrow(() => validateFootballCoachDecision({}, snapshot));
+});
+
+test("ownership rejects opponent defense, timeout, and tempo overrides", async () => {
+	const game = await initCoachScrimmage();
+	assert.throws(
+		() =>
+			game.validateCoachDecision(
+				{ defenseId: "blitz" },
+				game.getCoachSnapshot("play"),
+			),
+		/own team/,
+	);
+	game.isClockRunning = true;
+	assert.throws(
+		() =>
+			game.validateCoachDecision(
+				{ timeout: 1 },
+				game.getCoachSnapshot("clock"),
+			),
+		/own team/,
+	);
+	game.setCoachTeam(1);
+	assert.throws(
+		() =>
+			game.validateCoachDecision(
+				{ tempo: "chewClock" },
+				game.getCoachSnapshot("clock"),
+			),
+		/own team/,
+	);
+	assert.doesNotThrow(() =>
+		game.validateCoachDecision({ timeout: 1 }, game.getCoachSnapshot("clock")),
+	);
+});
+
+test("invalid target roles, injuries, routes, and unknown decision keys are rejected before the snap", async () => {
+	const game = await initCoachScrimmage();
+	const snapshot = game.getCoachSnapshot("play");
+	const rb = snapshot.eligibleRushers!.find((p) => p.pos === "RB")!;
+	// A natural RB may legitimately be a depth-chart WR/QB on custom rosters.
+	// This validation case explicitly excludes those permitted alternate roles.
+	for (const formation of ["11", "13"] as const) {
+		snapshot.lineups!.offense[formation] = snapshot.lineups!.offense[
+			formation
+		].filter((p) => p.id !== rb.id);
+	}
+	for (const decision of [
+		{ callId: "slant", targetPid: rb.id },
+		{ callId: "qbSneak", runnerPid: rb.id },
+		{ callId: "insideZone", route: "go" },
+		{ callId: "slant", targetPid: -9999 },
+		{ callId: "slant", opponentScore: 99 },
+	] as const) {
+		assert.throws(() => game.validateCoachDecision(decision, snapshot));
+	}
+	const injured = game.team[0].player.find((p) => p.id === rb.id)!;
+	injured.injured = true;
+	assert.throws(() =>
+		game.validateCoachDecision(
+			{ callId: "insideZone", runnerPid: rb.id },
+			game.getCoachSnapshot("play"),
+		),
+	);
+	assert.equal(game.team[0].stat.rus + game.team[0].stat.pss, 0);
+});
+
+test("explicit no-timeout still allows the opposing AI to stop a late kneel", async () => {
+	const game = await initKneelScenario();
+	game.setCoachTeam(0);
+	const snapshot = await playOneCoachSnap(game, { play: "kneel" });
+	assert.equal(snapshot.timeouts[1], 2);
+	assert.equal(snapshot.timeouts[0], 3);
+	assert.closeTo(snapshot.clock * 60, 58, 1e-10);
+});
+
+test("the controlled defense gets a timeout window after an automatic opponent kneel", async () => {
+	const game = await initKneelScenario();
+	game.setCoachTeam(1);
+	game.getPlayType = () => "kneel";
+	let clockSeen = false;
+	await expect(
+		game.runInteractive((snapshot) => {
+			if (snapshot.stage === "clock") {
+				clockSeen = true;
+				assert.closeTo(snapshot.clock * 60, 58, 1e-10);
+				return { timeout: 1 };
+			}
+			if (clockSeen) {
+				assert.closeTo(snapshot.clock * 60, 58, 1e-10);
+				assert.equal(snapshot.timeouts[1], 2);
+				throw new Error("opponent kneel stopped");
+			}
+			return { defenseId: "base43" };
+		}),
+	).rejects.toThrow("opponent kneel stopped");
+});
+
+// Deliberately minimal test fixture. It is not a claimed NFL measurement.
+const coachReferenceFixture: FootballCoachReference = {
+	schemaVersion: 1,
+	generatedAt: "test fixture",
+	seasons: [],
+	sources: [],
+	players: [],
+	profiles: [
+		{
+			id: "runInside",
+			label: "Test only",
+			sampleSize: 20,
+			completionRate: null,
+			turnoverRate: 0,
+			meanYards: 20,
+			meanAirYards: null,
+			passRate: 0,
+			passAttempts: 0,
+			airYardsSampleSize: 0,
+			rushSampleSize: 20,
+			rushYardsDistribution: [{ yards: 20, count: 20 }],
+		},
+	],
+};
+
+test("a supplied observed yard histogram changes the tactical baseline with native player adjustments", async () => {
+	const without = await initCoachScrimmage();
+	await playOneCoachSnap(without, { callId: "insideZone" });
+	const withReference = await initCoachScrimmage();
+	withReference.setCoachReference(coachReferenceFixture);
+	const snapshot = await playOneCoachSnap(withReference, {
+		callId: "insideZone",
+	});
+	assert.equal(snapshot.lastCall?.referenceProfile, "runInside");
+	assert.equal(snapshot.lastCall?.referenceSampleSize, 20);
+	assert.isAbove(
+		withReference.team[0].stat.rusYds,
+		without.team[0].stat.rusYds,
+	);
+});
+
+test("missing empirical families use the native tactical fallback", async () => {
+	const without = await initCoachScrimmage();
+	const withoutSnapshot = await playOneCoachSnap(without, { callId: "draw" });
+	const withReference = await initCoachScrimmage();
+	withReference.setCoachReference(coachReferenceFixture);
+	const snapshot = await playOneCoachSnap(withReference, { callId: "draw" });
+	assert.isUndefined(snapshot.lastCall?.referenceProfile);
+	assert.deepEqual(snapshot.events, withoutSnapshot.events);
+});
+
+test("control-team and reference setup preserve exact undefined-auto parity", async () => {
+	let random = mockSeededRandom();
+	let expected;
+	try {
+		const automatic = await initGameSim();
+		expected = automatic.run();
+	} finally {
+		random.mockRestore();
+	}
+	random = mockSeededRandom();
+	try {
+		const interactive = await initGameSim();
+		interactive.setCoachTeam(0);
+		interactive.setCoachReference(coachReferenceFixture);
+		assert.deepEqual(
+			await interactive.runInteractive(() => undefined),
+			expected,
+		);
+	} finally {
+		random.mockRestore();
+	}
+});
+
+test("a depth-chart receiver with a different natural position can be targeted", async () => {
+	const game = await initCoachScrimmage();
+	const projected = game
+		.getCoachSnapshot("play")
+		.lineups!.offense["11"].find((p) => p.slot === "WR1")!;
+	const target = game.team[0].player.find((p) => p.id === projected.id)!;
+	target.pos = "QB";
+	const snapshot = await playOneCoachSnap(game, {
+		callId: "slant",
+		targetPid: target.id,
+	});
+	assert.equal(snapshot.lastCall?.targetPid, target.id);
+	assert.include(game.playersOnField[0].WR!, target);
+	assert.notInclude(game.playersOnField[0].QB!, target);
+	assert.equal(target.stat.tgt, 1);
+});
+
+test("a selected reserve absent from positional depth is still pinned into the call", async () => {
+	const game = await initCoachScrimmage();
+	const target = game.team[0].player.find((p) => p.pos === "WR")!;
+	game.team[0].depth.WR = game.team[0].depth.WR.filter(
+		(p) => p.id !== target.id,
+	);
+	await playOneCoachSnap(game, { callId: "slant", targetPid: target.id });
+	assert.include(game.playersOnField[0].WR!, target);
+	assert.equal(target.stat.rec, 1);
+});
+
+test("native positional fallbacks support a roster lacking natural wide receivers", async () => {
+	const game = await initCoachScrimmage();
+	for (const player of game.team[0].player) {
+		if (player.pos === "WR") {
+			player.pos = "RB";
+		}
+	}
+	const target = game
+		.getCoachSnapshot("play")
+		.lineups!.offense["11"].find((p) => p.slot === "WR1")!;
+	const snapshot = await playOneCoachSnap(game, {
+		callId: "slant",
+		targetPid: target.id,
+	});
+	assert.equal(snapshot.playersOnField[0].length, 11);
+	assert.equal(snapshot.lastCall?.targetPid, target.id);
+	assert.equal(game.team[0].stat.pssCmp, 1);
+});
+
+test("an RPO player cannot be assigned simultaneously as receiver and runner", async () => {
+	const game = await initCoachScrimmage();
+	const player = game.getCoachSnapshot("play").eligibleRushers![0]!;
+	assert.throws(
+		() =>
+			game.validateCoachDecision(
+				{ callId: "zoneBubble", targetPid: player.id, runnerPid: player.id },
+				game.getCoachSnapshot("play"),
+			),
+		/different players/,
+	);
+});
+
+test.each(["run", "pass"] as const)(
+	"the RPO read chooses native %s from the front and rating matchup",
+	async (expected) => {
+		const game = await initCoachScrimmage();
+		const nativeUpdate = game.updateTeamCompositeRatings.bind(game);
+		game.updateTeamCompositeRatings = () => {
+			nativeUpdate();
+			game.team[0].compositeRating.receiving = expected === "pass" ? 100 : 0;
+		};
+		const snapshot = await playOneCoachSnap(game, { callId: "zoneBubble" });
+		assert.equal(snapshot.lastCall?.play, expected);
+		assert.equal(game.team[0].stat[expected === "pass" ? "pss" : "rus"], 1);
+	},
+);
+
+test("defensive coaching preserves the opponent offense's late timeout AI", async () => {
+	const game = await initKneelScenario();
+	game.team[0].stat.pts = 0;
+	game.team[1].stat.pts = 7;
+	game.setCoachTeam(1);
+	game.getPlayType = () => "kneel";
+	const snapshot = await playOneCoachSnap(game, { defenseId: "base43" });
+	assert.equal(snapshot.timeouts[0], 2);
+	assert.equal(snapshot.timeouts[1], 3);
+	assert.closeTo(snapshot.clock * 60, 58, 1e-10);
+});
+
+test("the controlled defense can decline its AI timeout while the opponent kneels", async () => {
+	const game = await initKneelScenario();
+	game.setCoachTeam(1);
+	game.getPlayType = () => "kneel";
+	const snapshot = await playOneCoachSnap(game, { defenseId: "base43" });
+	assert.deepEqual(snapshot.timeouts, [3, 3]);
+	assert.closeTo(snapshot.clock * 60, 18, 1e-10);
+});
+
+test("an away-team coach completes a full native game with tactical calls, defenses, and own clock controls", async () => {
+	const game = await initGameSim();
+	game.setCoachTeam(1);
+	game.setCoachReference(coachReferenceFixture);
+	game.playByPlay.active = true;
+	game.baseInjuryRate = 0;
+	let offensiveCalls = 0;
+	let defensiveCalls = 0;
+	let clockChoices = 0;
+	const families = new Set<string>();
+	const random = mockSeededRandom();
+	try {
+		const result = await game.runInteractive((snapshot) => {
+			assert.equal(snapshot.controlledTeam, 1);
+			if (snapshot.stage === "clock") {
+				clockChoices += 1;
+				if (snapshot.clock < 1 && snapshot.canTimeout[1]) {
+					return { timeout: 1 };
+				}
+				return snapshot.offense === 1 ? { tempo: "hurryUp" } : {};
+			}
+			if (!snapshot.allowedPlays.includes("run")) {
+				return undefined;
+			}
+			if (snapshot.offense === 1) {
+				const call =
+					FOOTBALL_COACH_CALLS[offensiveCalls++ % FOOTBALL_COACH_CALLS.length]!;
+				families.add(call.group);
+				return { callId: call.id };
+			}
+			return {
+				defenseId:
+					FOOTBALL_COACH_DEFENSES[
+						defensiveCalls++ % FOOTBALL_COACH_DEFENSES.length
+					]!.id,
+			};
+		});
+		assert.equal(result.playByPlay?.at(-1)?.type, "gameOver");
+		assert.deepEqual([...families].sort(), ["pass", "rpo", "run", "trick"]);
+		assert.isAbove(defensiveCalls, FOOTBALL_COACH_DEFENSES.length);
+		assert.isAbove(clockChoices, 0);
+		for (const team of result.team) {
+			assert.isTrue(Number.isFinite(team.stat.pts));
+			assert.isAbove(team.stat.pss + team.stat.rus, 0);
+			for (const player of team.player) {
+				for (const stat of [
+					"pss",
+					"pssYds",
+					"rus",
+					"rusYds",
+					"rec",
+					"recYds",
+				]) {
+					assert.isTrue(Number.isFinite(player.stat[stat]), stat);
+				}
+			}
+		}
+	} finally {
+		random.mockRestore();
+	}
+});
 
 test("interactive auto decisions preserve the exact native game result", async () => {
 	const random = vi.spyOn(Math, "random");

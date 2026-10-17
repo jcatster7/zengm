@@ -34,6 +34,7 @@ export interface MetaDB extends DBSchema {
 			| Partial<Settings>
 			| KeyboardShortcutsLocal;
 		key:
+			| `footballCoachLinks:${number}`
 			| "lastChangesVersion"
 			| "nagged"
 			| "naggedMailingList"

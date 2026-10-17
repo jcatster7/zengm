@@ -48,6 +48,7 @@ import type {
 	FootballCoachSnapshot,
 } from "../../../common/footballCoach.ts";
 import { footballCoach } from "./footballCoach.ts";
+import { loadFootballCoachReference } from "./footballCoachReference.ts";
 import { advStats } from "../../util/advStats.ts";
 
 /**
@@ -429,6 +430,25 @@ const play = async (
 		});
 		if (__SPORT === "football" && coach && gid === gidOneGame) {
 			const footballSim = sim as GameSimFootball;
+			const coachingSession = footballCoach.get(g.get("lid"));
+			if (!coachingSession) {
+				throw new Error("The coaching session is no longer available.");
+			}
+			footballSim.setCoachTeam(coachingSession.controlledTeam);
+			try {
+				const reference = await loadFootballCoachReference();
+				footballSim.setCoachReference(reference);
+				footballCoach.setReference(g.get("lid"), {
+					status: "loaded",
+					seasons: reference.seasons,
+				});
+			} catch {
+				footballCoach.setReference(g.get("lid"), {
+					status: "fallback",
+					message:
+						"NFL reference data is unavailable. This game uses native tactical distributions.",
+				});
+			}
 			const result = await footballSim.runInteractive(coach);
 			footballCoach.updateFinalSnapshot(
 				g.get("lid"),

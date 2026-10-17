@@ -34,7 +34,23 @@ import type {
 	FootballCoachDecision,
 	FootballCoachPlay,
 	FootballCoachSnapshot,
+	FootballCoachLastCall,
+	FootballCoachLineupPlayer,
 } from "../../../common/footballCoach.ts";
+import {
+	FOOTBALL_COACH_CALLS,
+	FOOTBALL_COACH_DEFENSES,
+	FOOTBALL_COACH_DEFAULT_DEFENSES,
+	FOOTBALL_COACH_PERSONNEL,
+	getFootballCoachCall,
+	getFootballCoachDefense,
+	getFootballCoachRoute,
+	validateFootballCoachDecision,
+	type FootballCoachCallDefinition,
+	type FootballCoachDefenseId,
+	type FootballCoachFormation,
+} from "../../../common/footballCoachPlaybook.ts";
+import type { FootballCoachReference } from "../../../common/footballCoachReference.ts";
 import {
 	choice,
 	randInt,
@@ -47,6 +63,16 @@ const teamNums: [TeamNum, TeamNum] = [0, 1];
 type CoachPause = {
 	stage: FootballCoachSnapshot["stage"];
 	clock?: number;
+};
+
+type CoachTactics = {
+	decision: FootballCoachDecision;
+	call?: FootballCoachCallDefinition;
+	formation: FootballCoachFormation;
+	defense: ReturnType<typeof getFootballCoachDefense>;
+	route?: ReturnType<typeof getFootballCoachRoute>;
+	rushers: PlayerGameSim[];
+	coverage: PlayerGameSim[];
 };
 
 // A normal simulation drains the same steps without waiting or changing decisions.
@@ -140,6 +166,128 @@ const fatigue = (energy: number, injured: boolean): number => {
 };
 
 class GameSim extends GameSimBase {
+	private coachTactics: CoachTactics | undefined;
+	private lastCoachCall: FootballCoachLastCall | undefined;
+	private coachReference: FootballCoachReference | undefined;
+	private coachTeam: TeamNum | undefined;
+
+	setCoachTeam(t: TeamNum) {
+		if (t !== 0 && t !== 1) {
+			throw new Error("Invalid controlled team.");
+		}
+		this.coachTeam = t;
+	}
+
+	setCoachReference(reference: FootballCoachReference) {
+		if (reference.schemaVersion !== 1 || !Array.isArray(reference.profiles)) {
+			throw new Error("Unsupported football reference data.");
+		}
+		this.coachReference = reference;
+	}
+
+	private sampleCoachReference(kind: "pass" | "run") {
+		const tactics = this.coachTactics;
+		if (!tactics?.call || !this.coachReference) {
+			return undefined;
+		}
+		const call = tactics.call;
+		const route = tactics.route;
+		const family =
+			kind === "pass"
+				? route?.id === "screen"
+					? "passScreen"
+					: (route?.depth ?? 8.6) >= 20
+						? "passDeep"
+						: (route?.depth ?? 8.6) >= 10
+							? "passMedium"
+							: "passShort"
+				: call?.runStyle === "draw"
+					? "runDraw"
+					: ["outside", "toss", "reverse"].includes(call?.runStyle ?? "")
+						? "runOutside"
+						: "runInside";
+		const candidates = [
+			call?.group === "rpo"
+				? "rpo"
+				: call?.group === "trick"
+					? "trick"
+					: undefined,
+			family,
+		].filter((id): id is string => id !== undefined);
+		for (const id of candidates) {
+			const profile = this.coachReference.profiles.find(
+				(entry) => entry.id === id,
+			);
+			let distribution =
+				kind === "pass"
+					? profile?.airYardsDistribution
+					: profile?.rushYardsDistribution;
+			if (!distribution?.length) {
+				continue;
+			}
+			distribution = distribution.filter(
+				(entry) =>
+					Number.isFinite(entry.yards) &&
+					Number.isInteger(entry.count) &&
+					entry.count > 0,
+			);
+			if (kind === "pass" && route) {
+				const nearRoute = distribution.filter(
+					(entry) =>
+						Math.abs(entry.yards - route.depth) <= Math.max(3, route.spread),
+				);
+				if (nearRoute.reduce((sum, entry) => sum + entry.count, 0) >= 20) {
+					distribution = nearRoute;
+				}
+			}
+			if (!distribution.length) {
+				continue;
+			}
+			const sampled = choice(distribution, (entry) => entry.count);
+			if (this.lastCoachCall) {
+				this.lastCoachCall.referenceProfile = id;
+				this.lastCoachCall.referenceSampleSize = profile!.sampleSize;
+			}
+			return sampled.yards;
+		}
+		return undefined;
+	}
+
+	private chooseCoachPlayer(players: PlayerGameSim[], rating: string) {
+		return choice(
+			players,
+			(p) =>
+				Math.max(
+					0.001,
+					p.compositeRating[rating] * fatigue(p.stat.energy, p.injured),
+				) ** 1.5,
+		);
+	}
+
+	private chooseCoachDefender(target: PlayerGameSim) {
+		const tactics = this.coachTactics;
+		if (!tactics?.coverage.length) {
+			return this.pickPlayer(this.d, "passCoverage", undefined, 2);
+		}
+		let pool = tactics.coverage;
+		if (tactics.defense.coverage === "man") {
+			const matched = pool.filter((p) =>
+				target.pos === "WR" ? p.pos === "CB" : p.pos === "LB" || p.pos === "S",
+			);
+			if (matched.length) {
+				pool = matched;
+			}
+		} else if (
+			tactics.defense.coverage === "prevent" &&
+			(tactics.route?.depth ?? 0) >= 15
+		) {
+			const safeties = pool.filter((p) => p.pos === "S");
+			if (safeties.length) {
+				pool = safeties;
+			}
+		}
+		return this.chooseCoachPlayer(pool, "passCoverage");
+	}
 	team: [TeamGameSim, TeamGameSim];
 
 	playersOnField: [PlayersOnField, PlayersOnField];
@@ -1008,7 +1156,208 @@ class GameSim extends GameSimBase {
 				? ["extraPoint", "twoPointConversion"]
 				: ["extraPoint"];
 		}
-		return ["run", "pass", "kneel", "punt", "fieldGoal"];
+		return [
+			"run",
+			"pass",
+			"kneel",
+			...(this.clock > 0 ? ["spike" as const] : []),
+			"punt",
+			"fieldGoal",
+		];
+	}
+
+	// Pure depth-chart previews do not consume random numbers or mutate statistics.
+	private getCoachLineup(
+		t: TeamNum,
+		positions: Partial<Record<Position, number>>,
+		pinned: { id: number; position: Position }[] = [],
+	): PlayersOnField {
+		const used = new Set<number>();
+		const lineup: PlayersOnField = {};
+		const pins = pinned.flatMap(({ id, position }) => {
+			const player = this.team[t].player.find((p) => p.id === id && !p.injured);
+			return player ? [{ player, position }] : [];
+		});
+		for (const pos of helpers.keys(positions)) {
+			const count = positions[pos]!;
+			const depth = this.team[t].depth[pos] ?? [];
+			const atPosition: PlayerGameSim[] = [];
+			const add = (p: PlayerGameSim) => {
+				if (!used.has(p.id) && atPosition.length < count) {
+					atPosition.push(p);
+					used.add(p.id);
+				}
+			};
+			for (const pin of pins.filter((pin) => pin.position === pos)) {
+				add(pin.player);
+			}
+			for (const candidates of [
+				depth.filter((p) => !p.injured && p.stat.energy >= 0.25),
+				depth.filter((p) => !p.injured),
+				depth,
+			]) {
+				for (const p of candidates) {
+					// Reserve the called role, including out-of-position depth-chart players.
+					if (
+						!pins.some((pin) => pin.player.id === p.id && pin.position !== pos)
+					) {
+						add(p);
+					}
+				}
+			}
+			lineup[pos] = atPosition;
+		}
+		return lineup;
+	}
+
+	private describeCoachLineup(
+		lineup: PlayersOnField,
+	): FootballCoachLineupPlayer[] {
+		return helpers.keys(lineup).flatMap((pos) =>
+			(lineup[pos] ?? []).map((p, index) => ({
+				id: p.id,
+				name: p.name,
+				pos: p.pos,
+				slot: `${pos}${index + 1}`,
+			})),
+		);
+	}
+
+	private getCoachEligible(
+		positions: string[],
+		lineups: FootballCoachLineupPlayer[],
+	) {
+		const roleIds = new Set(
+			lineups
+				.filter((p) => positions.includes(p.slot.replace(/\d+$/, "")))
+				.map((p) => p.id),
+		);
+		return this.team[this.o].player
+			.filter(
+				(p) => (positions.includes(p.pos) || roleIds.has(p.id)) && !p.injured,
+			)
+			.map((p) => ({
+				id: p.id,
+				name: p.name,
+				pos: p.pos,
+				energy: p.stat.energy ?? 0,
+				injured: p.injured,
+			}));
+	}
+
+	private prepareCoachTactics(decision: FootballCoachDecision | undefined) {
+		this.coachTactics = undefined;
+		if (
+			!decision ||
+			[
+				decision.callId,
+				decision.targetPid,
+				decision.runnerPid,
+				decision.route,
+				decision.defenseId,
+			].every((value) => value === undefined)
+		) {
+			return;
+		}
+		const call = decision.callId
+			? getFootballCoachCall(decision.callId)
+			: undefined;
+		const formation =
+			call?.formation ??
+			(this.coachTeam !== undefined && this.o !== this.coachTeam
+				? choice(["11", "21", "12"] as const)
+				: "11");
+		this.coachTactics = {
+			decision,
+			call,
+			formation,
+			defense: getFootballCoachDefense(
+				decision.defenseId ?? FOOTBALL_COACH_DEFAULT_DEFENSES[formation],
+			),
+			route:
+				decision.route || call?.route
+					? getFootballCoachRoute(decision.route ?? call!.route!)
+					: undefined,
+			rushers: [],
+			coverage: [],
+		};
+	}
+
+	private getCoachPlayType() {
+		const call = this.coachTactics?.call;
+		if (!call) {
+			return undefined;
+		}
+		if (call.kind !== "option") {
+			return call.kind;
+		}
+		this.updatePlayersOnField("run");
+		const front = this.coachTactics!.defense.positions;
+		const box = front.DL + front.LB;
+		const offense = this.team[this.o].compositeRating;
+		const defense = this.team[this.d].compositeRating;
+		// A documented coaching read, not a learned NFL success probability.
+		return box >= 7 ||
+			offense.receiving / Math.max(0.01, defense.passCoverage) >
+				offense.runBlocking / Math.max(0.01, defense.runStopping)
+			? "pass"
+			: "run";
+	}
+
+	private updateCoachAssignments() {
+		const tactics = this.coachTactics;
+		if (!tactics) {
+			return;
+		}
+		const field = this.playersOnField[this.d];
+		const candidates = [
+			...(field.DL ?? []),
+			...(field.LB ?? []).toSorted(
+				(a, b) => b.compositeRating.passRushing - a.compositeRating.passRushing,
+			),
+		];
+		tactics.rushers = candidates.slice(0, tactics.defense.rushers);
+		const rushIds = new Set(tactics.rushers.map((p) => p.id));
+		tactics.coverage = getPlayers(field).filter((p) => !rushIds.has(p.id));
+		const groups = (players: PlayerGameSim[]) => {
+			const grouped: PlayersOnField = {};
+			for (const pos of helpers.keys(field)) {
+				grouped[pos] = (field[pos] ?? []).filter((p) => players.includes(p));
+			}
+			return grouped;
+		};
+		const composite = this.team[this.d].compositeRating;
+		composite.passRushing = Math.max(
+			0.01,
+			(getCompositeFactor(
+				groups(tactics.rushers),
+				COMPOSITE_FACTOR_OPTIONS.passRushing,
+			) *
+				tactics.rushers.length) /
+				4,
+		);
+		composite.passCoverage = Math.max(
+			0.01,
+			(getCompositeFactor(
+				groups(tactics.coverage),
+				COMPOSITE_FACTOR_OPTIONS.passCoverage,
+			) *
+				tactics.coverage.length) /
+				7,
+		);
+		if (tactics.defense.coverage === "prevent") {
+			composite.runStopping = Math.max(
+				0.01,
+				getCompositeFactor(
+					{ ...field, S: [] },
+					COMPOSITE_FACTOR_OPTIONS.runStopping,
+				),
+			);
+		}
+		if (this.lastCoachCall) {
+			this.lastCoachCall.rusherPids = tactics.rushers.map((p) => p.id);
+			this.lastCoachCall.coveragePids = tactics.coverage.map((p) => p.id);
+		}
 	}
 
 	getCoachSnapshot(
@@ -1019,9 +1368,30 @@ class GameSim extends GameSimBase {
 			Object.values(this.playersOnField[t]).flatMap((atPosition) =>
 				atPosition.map((p) => ({ id: p.id, name: p.name, pos: p.pos })),
 			);
+		const scrimmage =
+			stage === "play" &&
+			this.awaitingKickoff === undefined &&
+			!this.awaitingAfterTouchdown;
+		const offenseLineups = Object.fromEntries(
+			helpers
+				.keys(FOOTBALL_COACH_PERSONNEL)
+				.map((id) => [
+					id,
+					this.describeCoachLineup(
+						this.getCoachLineup(this.o, FOOTBALL_COACH_PERSONNEL[id].positions),
+					),
+				]),
+		) as Record<FootballCoachFormation, FootballCoachLineupPlayer[]>;
+		const defenseLineups = Object.fromEntries(
+			FOOTBALL_COACH_DEFENSES.map((entry) => [
+				entry.id,
+				this.describeCoachLineup(this.getCoachLineup(this.d, entry.positions)),
+			]),
+		) as Record<FootballCoachDefenseId, FootballCoachLineupPlayer[]>;
 		return {
 			gid: this.id,
 			stage,
+			controlledTeam: this.coachTeam,
 			quarter: this.team[0].stat.ptsQtrs.length,
 			numPeriods: this.numPeriods,
 			clock: Math.max(0, clock),
@@ -1051,6 +1421,24 @@ class GameSim extends GameSimBase {
 			awaitingAfterTouchdown: this.awaitingAfterTouchdown,
 			isClockRunning: this.isClockRunning,
 			allowedPlays: stage === "play" ? this.getAllowedCoachPlays() : [],
+			allowedCallIds: scrimmage
+				? FOOTBALL_COACH_CALLS.map((call) => call.id)
+				: [],
+			allowedDefenseIds: scrimmage
+				? FOOTBALL_COACH_DEFENSES.map((entry) => entry.id)
+				: [],
+			eligibleReceivers: this.getCoachEligible(
+				["WR", "TE", "RB"],
+				Object.values(offenseLineups).flat(),
+			),
+			eligibleRushers: this.getCoachEligible(
+				["QB", "RB", "WR"],
+				Object.values(offenseLineups).flat(),
+			),
+			lineups: { offense: offenseLineups, defense: defenseLineups },
+			lastCall: this.lastCoachCall
+				? helpers.deepCopy(this.lastCoachCall)
+				: undefined,
 			events: helpers.deepCopy(
 				this.playByPlay.playByPlay
 					.filter((event) => event.type !== "stat" && event.type !== "init")
@@ -1064,31 +1452,7 @@ class GameSim extends GameSimBase {
 		decision: FootballCoachDecision | undefined,
 		snapshot: FootballCoachSnapshot,
 	) {
-		if (decision === undefined) {
-			return;
-		}
-		if (snapshot.stage === "play") {
-			if (
-				decision.timeout !== undefined ||
-				decision.tempo !== undefined ||
-				(decision.play !== undefined &&
-					decision.play !== "auto" &&
-					!snapshot.allowedPlays.includes(decision.play))
-			) {
-				throw new Error("That play is not available in the current situation.");
-			}
-		} else if (
-			decision.play !== undefined ||
-			(decision.timeout !== undefined &&
-				((decision.timeout !== 0 && decision.timeout !== 1) ||
-					!snapshot.canTimeout[decision.timeout])) ||
-			(decision.tempo !== undefined &&
-				!["normal", "hurryUp", "chewClock"].includes(decision.tempo))
-		) {
-			throw new Error(
-				"That clock decision is not available in the current situation.",
-			);
-		}
+		validateFootballCoachDecision(decision, snapshot);
 	}
 
 	simPlay() {
@@ -1103,12 +1467,31 @@ class GameSim extends GameSimBase {
 		const decision = yield { stage: "play" };
 		// Reset before calling Play, so Play can set to true if necessary for the next play
 		this.playUntimedPossession = false;
+		this.prepareCoachTactics(decision);
 
 		const playType =
-			decision?.play && decision.play !== "auto"
+			this.getCoachPlayType() ??
+			(decision?.play && decision.play !== "auto"
 				? decision.play
-				: this.getPlayType();
-		const manualKneel = decision?.play === "kneel";
+				: this.getPlayType());
+		this.lastCoachCall =
+			this.coachTactics && (playType === "run" || playType === "pass")
+				? {
+						callId: decision?.callId,
+						name:
+							this.coachTactics.call?.name ??
+							(playType === "pass" ? "Pass" : "Run"),
+						play: playType,
+						route: this.coachTactics.route?.id,
+						defenseId: this.coachTactics.defense.id,
+					}
+				: undefined;
+		// A human defending an AI kneel also gets the timeout window before runoff.
+		// Draining with undefined decisions keeps the native automatic timing.
+		const manualKneel =
+			playType === "kneel" &&
+			(decision?.play === "kneel" ||
+				(decision !== undefined && this.coachTeam !== undefined));
 
 		// Set these before creating a new Play so they are updated in there too
 		if (playType === "extraPoint") {
@@ -1184,6 +1567,8 @@ class GameSim extends GameSimBase {
 			dt = this.doRun();
 		} else if (playType === "kneel") {
 			dt = this.doKneel(manualKneel);
+		} else if (playType === "spike") {
+			dt = this.doSpike();
 		} else {
 			throw new Error(`Unknown playType "${playType}"`);
 		}
@@ -1231,15 +1616,20 @@ class GameSim extends GameSimBase {
 		}
 
 		if (
-			clockDecision === undefined &&
+			(clockDecision === undefined || this.coachTeam !== undefined) &&
 			clockAtEndOfPlay > 0 &&
 			!twoMinuteWarningHappening
 		) {
 			// Timeouts - small chance at any time
+			const autoTimeout = (t: TeamNum, toStopClock: boolean) => {
+				if (clockDecision === undefined || t !== this.coachTeam) {
+					this.doTimeout(t, toStopClock);
+				}
+			};
 			if (Math.random() < 0.01) {
-				this.doTimeout(this.o, false);
+				autoTimeout(this.o, false);
 			} else if (Math.random() < 0.003) {
-				this.doTimeout(this.d, false);
+				autoTimeout(this.d, false);
 			}
 
 			// Timeouts - late in game when clock is running
@@ -1253,19 +1643,19 @@ class GameSim extends GameSimBase {
 						if (diff > 0) {
 							// If offense is winning, defense uses timeouts when near the end
 							if (this.clock < 2.5) {
-								this.doTimeout(this.d, true);
+								autoTimeout(this.d, true);
 							}
 						} else {
 							if (this.clock < 1.5) {
 								// If offense is losing or tied, offense uses timeouts when even nearer the end
-								this.doTimeout(this.o, true);
+								autoTimeout(this.o, true);
 							}
 						}
 					}
 				} else {
 					// Before halftime, less aggressive and don't care about score
 					if (this.clock < 1.5) {
-						this.doTimeout(this.o, true);
+						autoTimeout(this.o, true);
 					}
 				}
 			}
@@ -1324,7 +1714,7 @@ class GameSim extends GameSimBase {
 		}
 
 		this.updatePlayingTime(dt);
-		if (playType !== "kneel") {
+		if (playType !== "kneel" && playType !== "spike") {
 			this.injuries();
 		}
 
@@ -1442,6 +1832,57 @@ class GameSim extends GameSimBase {
 			| "punt"
 			| "kickoff",
 	) {
+		if (this.coachTactics && (playType === "run" || playType === "pass")) {
+			const { decision, formation, defense, call } = this.coachTactics;
+			const preview = this.getCoachLineup(
+				this.o,
+				FOOTBALL_COACH_PERSONNEL[formation].positions,
+			);
+			const pinRole = (id: number | undefined, roles: readonly Position[]) => {
+				if (id === undefined) {
+					return [];
+				}
+				const player = this.team[this.o].player.find((p) => p.id === id)!;
+				const position =
+					helpers
+						.keys(preview)
+						.find(
+							(pos) =>
+								roles.includes(pos) && preview[pos]?.some((p) => p.id === id),
+						) ??
+					(roles.includes(player.pos as Position)
+						? (player.pos as Position)
+						: roles[0]!);
+				return [{ id, position }];
+			};
+			const pinned = [
+				...pinRole(
+					decision.targetPid,
+					call?.targetPositions ?? ["WR", "TE", "RB"],
+				),
+				...pinRole(
+					decision.runnerPid,
+					call?.runnerPosition ? [call.runnerPosition] : ["QB", "RB", "WR"],
+				),
+			];
+			this.playersOnField[this.o] = this.getCoachLineup(
+				this.o,
+				FOOTBALL_COACH_PERSONNEL[formation].positions,
+				pinned,
+			);
+			this.playersOnField[this.d] = this.getCoachLineup(
+				this.d,
+				defense.positions,
+			);
+			for (const t of teamNums) {
+				for (const p of getPlayers(this.playersOnField[t])) {
+					this.recordStat(t, p, "gp");
+				}
+			}
+			this.updateTeamCompositeRatings();
+			this.updateCoachAssignments();
+			return;
+		}
 		let formation: Formation;
 
 		if (playType === "starters" || playType === "startersFake") {
@@ -2299,7 +2740,9 @@ class GameSim extends GameSimBase {
 	) {
 		const { d } = this.currentPlay.state.initial;
 
-		const p = this.pickPlayer(d, "passRushing", undefined, 5);
+		const p = this.coachTactics?.rushers.length
+			? this.chooseCoachPlayer(this.coachTactics.rushers, "passRushing")
+			: this.pickPlayer(d, "passRushing", undefined, 5);
 		const ydsRaw = randInt(-1, -12);
 		const yds = this.currentPlay.boundedYds(ydsRaw);
 
@@ -2347,12 +2790,21 @@ class GameSim extends GameSimBase {
 	}
 
 	probSack(qb: PlayerGameSim) {
-		return (
+		const probability =
 			((0.06 * this.team[this.d].compositeRating.passRushing) /
 				(0.5 *
 					(qb.compositeRating.avoidingSacks +
 						this.team[this.o].compositeRating.passBlocking))) *
-			g.get("sackFactor")
+			g.get("sackFactor");
+		const tactics = this.coachTactics;
+		if (!tactics?.route) {
+			return probability;
+		}
+		// Longer designed dropbacks expose the passer to the existing sack hazard.
+		return (
+			1 -
+			(1 - helpers.bound(probability, 0, 1)) **
+				((tactics.route.seconds + (tactics.call?.setupSeconds ?? 0)) / 4)
 		);
 	}
 
@@ -2388,7 +2840,14 @@ class GameSim extends GameSimBase {
 				this.team[this.o].compositeRating.passBlocking /
 					this.team[this.d].compositeRating.passRushing,
 			);
-		const p = (0.19 + 0.4 * factor ** 1.25) * g.get("completionFactor");
+		let p = (0.19 + 0.4 * factor ** 1.25) * g.get("completionFactor");
+		if (this.coachTactics?.route) {
+			// Explicit tactical depth tradeoff, not an empirical completion forecast.
+			const depth = Math.max(0, this.coachTactics.route.depth);
+			p *= Math.sqrt(
+				(8.6 + 20 * qb.compositeRating.passingDeep) / (8.6 + depth),
+			);
+		}
 		return helpers.bound(p, 0, 0.95);
 	}
 
@@ -2409,6 +2868,37 @@ class GameSim extends GameSimBase {
 
 		if (penInfo) {
 			return 0;
+		}
+		const tactics = this.coachTactics;
+		const qb = this.getTopPlayerOnField(
+			o,
+			tactics?.call?.passerPosition ?? "QB",
+		);
+		let coachTarget: PlayerGameSim | undefined;
+		if (tactics) {
+			const eligible = getPlayers(
+				this.playersOnField[o],
+				tactics.call?.targetPositions
+					? [...tactics.call.targetPositions]
+					: ["WR", "TE", "RB"],
+			);
+			coachTarget =
+				eligible.find((p) => p.id === tactics.decision.targetPid) ??
+				this.chooseCoachPlayer(eligible, "gettingOpen");
+			const blockers = {
+				...this.playersOnField[o],
+				TE: (this.playersOnField[o].TE ?? []).filter(
+					(p) => p !== coachTarget && p !== qb,
+				),
+				RB: (this.playersOnField[o].RB ?? []).filter(
+					(p) => p !== coachTarget && p !== qb,
+				),
+			};
+			this.team[o].compositeRating.passBlocking =
+				getBlockingFactors(blockers)[0];
+			if (this.lastCoachCall) {
+				this.lastCoachCall.targetPid = coachTarget.id;
+			}
 		}
 
 		const pbw = new Map<
@@ -2454,7 +2944,12 @@ class GameSim extends GameSimBase {
 		const te = this.playersOnField[o].TE;
 		if (te) {
 			for (const p of te) {
-				if (Math.random() < 0.1) {
+				if (
+					p !== coachTarget &&
+					(!tactics || p !== qb) &&
+					(tactics?.call?.protection === "max" ||
+						(tactics?.call?.protection !== "screen" && Math.random() < 0.1))
+				) {
 					addBlockAttempt(p, "Other", 0.75);
 				}
 			}
@@ -2462,13 +2957,20 @@ class GameSim extends GameSimBase {
 		const rb = this.playersOnField[o].RB;
 		if (rb) {
 			for (const p of rb) {
-				if (Math.random() < 0.5) {
+				if (
+					p !== coachTarget &&
+					(!tactics || p !== qb) &&
+					(tactics?.call?.protection === "max" ||
+						(tactics?.call?.protection !== "screen" && Math.random() < 0.5))
+				) {
 					addBlockAttempt(p, "Other", 0.5);
 				}
 			}
 		}
 
-		const qb = this.getTopPlayerOnField(o, "QB");
+		if (this.lastCoachCall) {
+			this.lastCoachCall.passerPid = qb.id;
+		}
 		this.currentPlay.addEvent({
 			type: "dropback",
 			pbw,
@@ -2480,7 +2982,9 @@ class GameSim extends GameSimBase {
 			t: o,
 		});
 
-		let dt = randInt(2, 6);
+		let dt = tactics?.route
+			? tactics.route.seconds + (tactics.call?.setupSeconds ?? 0)
+			: randInt(2, 6);
 
 		if (Math.random() < 0.75 && Math.random() < this.probFumble(qb)) {
 			const yds = this.currentPlay.boundedYds(randInt(-1, -10));
@@ -2493,16 +2997,21 @@ class GameSim extends GameSimBase {
 			return this.doSack(qb, pbw);
 		}
 
-		if (this.probScramble(this.playersOnField[o].QB?.[0]) > Math.random()) {
-			return this.doRun(true);
+		if (
+			this.probScramble(tactics ? qb : this.playersOnField[o].QB?.[0]) >
+			Math.random()
+		) {
+			return this.doRun(true, tactics ? qb : undefined);
 		}
 
-		const target = this.pickPlayer(
-			o,
-			Math.random() < 0.2 ? "catching" : "gettingOpen",
-			["WR", "TE", "RB"],
-			1.5,
-		);
+		const target =
+			coachTarget ??
+			this.pickPlayer(
+				o,
+				Math.random() < 0.2 ? "catching" : "gettingOpen",
+				["WR", "TE", "RB"],
+				1.5,
+			);
 
 		// RB passes are often short, so 50% chance of a decrease in yardage, which is more severe for players with low gettingOpen
 		const rbFactor =
@@ -2526,8 +3035,23 @@ class GameSim extends GameSimBase {
 				100,
 			),
 		);
+		if (tactics?.route) {
+			const airYards =
+				this.sampleCoachReference("pass") ??
+				truncGauss(tactics.route.depth, tactics.route.spread, -5, 65);
+			const matchup =
+				(target.compositeRating.gettingOpen +
+					target.compositeRating.speed +
+					qb.compositeRating.passingDeep) /
+				Math.max(0.1, 3 * this.team[d].compositeRating.passCoverage);
+			const afterCatch = Math.max(0, truncGauss(3 * matchup, 3, -5, 20));
+			ydsRaw = Math.round(airYards + afterCatch);
+		}
 
-		if (Math.random() < qb.compositeRating.passingDeep * 0.05) {
+		if (
+			!tactics?.route &&
+			Math.random() < qb.compositeRating.passingDeep * 0.05
+		) {
 			ydsRaw += randInt(0, 109);
 		}
 
@@ -2546,7 +3070,9 @@ class GameSim extends GameSimBase {
 
 		const yds = this.currentPlay.boundedYds(ydsRaw);
 
-		const defender = this.pickPlayer(d, "passCoverage", undefined, 2);
+		const defender = tactics
+			? this.chooseCoachDefender(target)
+			: this.pickPlayer(d, "passCoverage", undefined, 2);
 		const complete = Math.random() < this.probComplete(qb, target, defender);
 		const interception = Math.random() < this.probInt(qb, defender);
 
@@ -2646,9 +3172,11 @@ class GameSim extends GameSimBase {
 		return dt;
 	}
 
-	doRun(qbScramble: boolean = false) {
+	doRun(qbScramble: boolean = false, scramblingPlayer?: PlayerGameSim) {
 		const o = this.o;
 		const d = this.d;
+		const tactics = this.coachTactics;
+		const style = !qbScramble ? tactics?.call?.runStyle : undefined;
 
 		let rbw:
 			| Map<PlayerGameSim, { type: "OL" | "Other"; won: boolean }>
@@ -2659,6 +3187,17 @@ class GameSim extends GameSimBase {
 		let positions: Position[];
 		if (qbScramble) {
 			positions = ["QB"];
+		} else if (
+			tactics?.call?.runnerPosition ||
+			tactics?.decision.runnerPid !== undefined
+		) {
+			positions = tactics.call?.runnerPosition
+				? [tactics.call.runnerPosition]
+				: ["RB", "QB", "WR"];
+			this.updatePlayersOnField("run");
+			if (this.checkPenalties("beforeSnap")) {
+				return 0;
+			}
 		} else {
 			positions = ["RB"];
 			const rand = Math.random();
@@ -2682,7 +3221,29 @@ class GameSim extends GameSimBase {
 		// Scrambles tend to be longer runs
 		const scrambleModifier = qbScramble ? 3 : 1;
 
-		const p = this.pickPlayer(o, "rushing", positions);
+		const eligible = tactics
+			? getPlayers(this.playersOnField[o], positions)
+			: undefined;
+		const p =
+			scramblingPlayer ??
+			(eligible
+				? (eligible.find(
+						(candidate) => candidate.id === tactics!.decision.runnerPid,
+					) ?? this.chooseCoachPlayer(eligible, "rushing"))
+				: this.pickPlayer(o, "rushing", positions));
+		if (this.lastCoachCall) {
+			this.lastCoachCall.runnerPid = p.id;
+		}
+		if (tactics && !qbScramble) {
+			const blockers = {
+				...this.playersOnField[o],
+				RB: (this.playersOnField[o].RB ?? []).filter(
+					(candidate) => candidate !== p,
+				),
+			};
+			this.team[o].compositeRating.runBlocking =
+				getBlockingFactors(blockers)[1];
+		}
 
 		if (!qbScramble) {
 			rbw = new Map();
@@ -2749,7 +3310,7 @@ class GameSim extends GameSimBase {
 		});
 
 		// Bound is so (in extreme contrived cases like 0 ovr teams) meanYds can't go too far above/below the truncGauss limits
-		const meanYds = helpers.bound(
+		let meanYds = helpers.bound(
 			(scrambleModifier *
 				(3.5 *
 					0.5 *
@@ -2759,9 +3320,56 @@ class GameSim extends GameSimBase {
 			-5,
 			15,
 		);
-		let ydsRaw = Math.round(truncGauss(meanYds, 6, -5, 15));
+		let spread = 6;
+		if (style) {
+			// Deliberate game-design adjustments, not claimed NFL coefficients. Each
+			// concept changes the native rating matchup, personnel, timing, or spread.
+			const front = this.playersOnField[d];
+			const edge = [
+				...(front.LB ?? []),
+				...(front.CB ?? []),
+				...(front.S ?? []),
+			];
+			const edgeSpeed =
+				edge.reduce(
+					(sum, defender) => sum + defender.compositeRating.speed,
+					0,
+				) / Math.max(1, edge.length);
+			if (["outside", "toss", "reverse"].includes(style)) {
+				meanYds += (p.compositeRating.speed - edgeSpeed) * 5;
+				spread = style === "reverse" ? 9 : style === "toss" ? 8 : 7;
+			} else if (style === "power" || style === "qbPower") {
+				meanYds +=
+					(this.team[o].compositeRating.runBlocking /
+						Math.max(0.01, this.team[d].compositeRating.runStopping) -
+						1) *
+					2;
+				spread = 4;
+			} else if (style === "counter") {
+				meanYds += (p.compositeRating.rushing - 0.5) * 2;
+				spread = 8;
+			} else if (style === "draw") {
+				meanYds += (tactics!.defense.rushers - 4) * 0.75;
+				spread = 5;
+			} else if (style === "sneak") {
+				meanYds = helpers.bound(meanYds / 3, -1, 3);
+				spread = 1;
+			}
+		}
+		const referenceYards =
+			style && style !== "sneak" ? this.sampleCoachReference("run") : undefined;
+		let ydsRaw = Math.round(
+			referenceYards !== undefined
+				? referenceYards + meanYds - 3.5
+				: truncGauss(
+						helpers.bound(meanYds, -5, 15),
+						spread,
+						-5,
+						style === "sneak" ? 3 : 15,
+					),
+		);
 
-		if (Math.random() < 0.01) {
+		if (style !== "sneak" && Math.random() < 0.01) {
 			ydsRaw += randInt(0, 109);
 		}
 
@@ -2773,7 +3381,10 @@ class GameSim extends GameSimBase {
 		ydsRaw = Math.round(ydsRaw * g.get("rushYdsFactor"));
 
 		const yds = this.currentPlay.boundedYds(ydsRaw);
-		const dt = randInt(2, 4) + Math.abs(yds) / 10;
+		const dt =
+			randInt(2, 4) +
+			Math.abs(yds) / 10 +
+			(qbScramble ? 0 : (tactics?.call?.setupSeconds ?? 0));
 
 		this.checkPenalties("run", {
 			ballCarrier: p,
@@ -2824,6 +3435,23 @@ class GameSim extends GameSimBase {
 		}
 
 		return dt;
+	}
+
+	doSpike() {
+		this.updatePlayersOnField("pass");
+		if (this.checkPenalties("beforeSnap")) {
+			return 0;
+		}
+		const qb = this.getTopPlayerOnField(this.o, "QB");
+		this.currentPlay.addEvent({ type: "spike", qb });
+		this.playByPlay.logEvent({
+			type: "spike",
+			clock: this.clock,
+			names: [qb.name],
+			t: this.o,
+		});
+		this.lastCoachCall = { name: "Spike", play: "spike", passerPid: qb.id };
+		return 2;
 	}
 
 	doKneel(separateRunoff = false) {

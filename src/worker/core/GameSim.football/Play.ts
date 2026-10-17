@@ -109,6 +109,10 @@ type PlayEvent =
 			yds: number;
 	  }
 	| {
+			type: "spike";
+			qb: PlayerGameSim;
+	  }
+	| {
 			type: "sk";
 			qb: PlayerGameSim;
 			p: PlayerGameSim;
@@ -548,6 +552,9 @@ class Play {
 				if (event.ol) {
 					statChanges.push([state.o, event.ol, "skAlw"]);
 				}
+			} else if (event.type === "spike") {
+				// A spike is a QB pass attempt with no intended receiver target.
+				statChanges.push([state.o, event.qb, "pss"]);
 			} else if (event.type === "pss") {
 				statChanges.push(
 					[state.o, event.qb, "pss"],
@@ -775,6 +782,9 @@ class Play {
 			state.scrimmage += event.yds;
 
 			// Set this to false, because we handle running the clock in dt in GameSim
+			state.isClockRunning = false;
+		} else if (event.type === "spike") {
+			state.incrementDown();
 			state.isClockRunning = false;
 		} else if (event.type === "sk") {
 			state.scrimmage += event.yds;

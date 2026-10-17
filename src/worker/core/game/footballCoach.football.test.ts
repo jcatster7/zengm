@@ -6,9 +6,13 @@ import type {
 import type { FootballCoachSession } from "../../../common/footballCoachSession.ts";
 import { FootballCoachController } from "./footballCoach.ts";
 
-const makeInput = (): Pick<FootballCoachSession, "lid" | "gid" | "teams"> => ({
+const makeInput = (): Pick<
+	FootballCoachSession,
+	"lid" | "gid" | "teams" | "controlledTeam"
+> => ({
 	lid: 7,
 	gid: 42,
+	controlledTeam: 0,
 	teams: [
 		{
 			tid: 4,
@@ -87,6 +91,120 @@ const flushMicrotasks = async () => {
 	await Promise.resolve();
 	await Promise.resolve();
 };
+
+test.each([0, 1] as const)(
+	"team %i owns only its offense, defense, and timeouts across possessions",
+	async (controlledTeam) => {
+		const opponent = controlledTeam === 0 ? 1 : 0;
+		const controller = new FootballCoachController();
+		const session = controller.start({ ...makeInput(), controlledTeam });
+		assert.strictEqual(
+			session.controlledTid,
+			makeInput().teams[controlledTeam].tid,
+		);
+		const defense = controller.next(
+			7,
+			makeSnapshot({
+				offense: opponent,
+				defense: controlledTeam,
+				allowedDefenseIds: ["blitz"],
+				controlledTeam: opponent,
+			}),
+		);
+		assert.strictEqual(
+			controller.get(7)?.snapshot?.controlledTeam,
+			controlledTeam,
+			"The controller must overwrite any snapshot ownership mismatch",
+		);
+		for (const decision of [
+			{ play: "pass" },
+			{ callId: "go" },
+			{ targetPid: 11 },
+			{ runnerPid: 11 },
+			{ route: "slant" },
+			{ tempo: "chewClock" },
+			{ timeout: opponent },
+		]) {
+			assert.throws(
+				() => submit(controller, decision as FootballCoachDecision),
+				/own team/,
+			);
+		}
+		assert.strictEqual(controller.get(7)?.status, "waiting");
+		submit(controller, { defenseId: "blitz" });
+		assert.deepEqual(await defense, { defenseId: "blitz" });
+		const clock = controller.next(
+			7,
+			makeSnapshot({
+				stage: "clock",
+				offense: opponent,
+				defense: controlledTeam,
+				allowedPlays: [],
+				canTimeout: [true, true],
+			}),
+		);
+		assert.throws(() => submit(controller, { timeout: opponent }), /own team/);
+		submit(controller, { timeout: controlledTeam });
+		assert.deepEqual(await clock, { timeout: controlledTeam });
+		const offense = controller.next(
+			7,
+			makeSnapshot({
+				offense: controlledTeam,
+				defense: opponent,
+				allowedDefenseIds: ["blitz"],
+			}),
+		);
+		assert.throws(() => submit(controller, { defenseId: "blitz" }), /own team/);
+		submit(controller, { play: "run" });
+		assert.deepEqual(await offense, { play: "run" });
+	},
+);
+
+test("opponent special-team calls and unavailable defensive timeouts advance automatically", async () => {
+	const { controller } = start();
+	assert.isUndefined(
+		await controller.next(
+			7,
+			makeSnapshot({
+				offense: 1,
+				defense: 0,
+				allowedPlays: ["kickoff", "onsideKick"],
+			}),
+		),
+	);
+	assert.isUndefined(
+		await controller.next(
+			7,
+			makeSnapshot({
+				stage: "clock",
+				offense: 1,
+				defense: 0,
+				canTimeout: [false, true],
+			}),
+		),
+	);
+	assert.strictEqual(controller.get(7)?.revision, 0);
+	const ownKick = controller.next(
+		7,
+		makeSnapshot({ allowedPlays: ["kickoff", "onsideKick"] }),
+	);
+	submit(controller, { play: "onsideKick" });
+	assert.deepEqual(await ownKick, { play: "onsideKick" });
+});
+
+test("coaching requires explicit valid team ownership", () => {
+	const controller = new FootballCoachController();
+	for (const controlledTeam of [undefined, -1, 2, "0"]) {
+		assert.throws(
+			() =>
+				controller.start({ ...makeInput(), controlledTeam } as Parameters<
+					FootballCoachController["start"]
+				>[0]),
+			/Choose your team/,
+		);
+	}
+	assert.strictEqual(controller.isActive(), false);
+});
 
 test("coaching lifecycle pauses at each decision and advances revisions once", async () => {
 	const { controller } = start();
@@ -568,6 +686,7 @@ test("a coached native game saves one box score and normal league stats before c
 		const session = footballCoach.start({
 			lid: 7,
 			gid: 42,
+			controlledTeam: 0,
 			teams: [teams[0]!, teams[1]!],
 		});
 		footballCoach.automate(7, session.sessionId, "end");
@@ -688,5 +807,42 @@ test("native quick and recursive simulation entrypoints honor recovery protectio
 		footballCoach.complete(8, "/test-cleanup");
 		g.setWithoutSavingToDB("lid", originalLid);
 		lock.reset();
+	}
+});
+
+test("the game-start API refuses coaching unrelated matchups and spectator teams", async () => {
+	const { resetCache, resetG } = await import("../../../test/helpers.ts");
+	const { PHASE } = await import("../../../common/constants.ts");
+	const { idb } = await import("../../db/index.ts");
+	const { g, local, lock } = await import("../../util/index.ts");
+	const { default: actions } = await import("../../api/actions.ts");
+	const { footballCoach } = await import("./footballCoach.ts");
+	const originalCache = idb.cache;
+	try {
+		resetG();
+		local.reset();
+		lock.reset();
+		g.setWithoutSavingToDB("lid", 12);
+		g.setWithoutSavingToDB("phase", PHASE.REGULAR_SEASON);
+		g.setWithoutSavingToDB("userTid", 2);
+		await resetCache({});
+		await idb.cache.schedule.add({ gid: 42, day: 1, homeTid: 0, awayTid: 1 });
+		await expect(actions.interactiveGame(42, {})).rejects.toThrow(
+			/only coach the team selected/,
+		);
+		g.setWithoutSavingToDB("userTid", 1);
+		g.setWithoutSavingToDB("spectator", true);
+		await expect(actions.interactiveGame(42, {})).rejects.toThrow(
+			/only coach the team selected/,
+		);
+		assert.strictEqual(footballCoach.isActive(), false);
+		assert.strictEqual(lock.get("gameSim"), false);
+		assert.strictEqual((await idb.cache.schedule.getAll()).length, 1);
+		assert.strictEqual((await idb.cache.games.getAll()).length, 0);
+	} finally {
+		idb.cache = originalCache;
+		local.reset();
+		lock.reset();
+		resetG();
 	}
 });

@@ -1,0 +1,629 @@
+.football-coach {
+	--coach-bg: #111923;
+	--coach-panel: #18232f;
+	--coach-border: #30404f;
+	--coach-muted: #9eb0bf;
+	--coach-accent: #f3ba4b;
+	background: var(--coach-bg);
+	color: #f0f4f7;
+	border: 1px solid var(--coach-border);
+	border-radius: 14px;
+	padding: 18px;
+	max-width: 1500px;
+	font-size: 13px;
+	box-shadow: 0 18px 50px #0002;
+	button,
+	input,
+	select {
+		font: inherit;
+	}
+	button:focus-visible,
+	a:focus-visible,
+	select:focus-visible,
+	[role="button"]:focus-visible {
+		outline: 3px solid #8edcf6;
+		outline-offset: 3px;
+	}
+	button:disabled {
+		opacity: 0.42;
+		cursor: not-allowed;
+	}
+	a {
+		color: #8edcf6;
+	}
+	h2,
+	h3,
+	h4 {
+		color: inherit;
+	}
+	.football-coach-eyebrow {
+		color: var(--coach-muted);
+		font-size: 10px;
+		font-weight: 800;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+	}
+	.football-coach-muted {
+		color: var(--coach-muted);
+	}
+	.football-coach-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 14px;
+	}
+	.football-coach-heading {
+		font-size: 20px;
+		letter-spacing: -0.04em;
+		font-weight: 800;
+		margin: 0;
+	}
+	.football-coach-toolbar-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 7px;
+	}
+	.football-coach-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		border: 1px solid #435666;
+		border-radius: 7px;
+		background: #223240;
+		color: #eef4f8;
+		padding: 8px 11px;
+		font-weight: 650;
+		text-decoration: none;
+		cursor: pointer;
+	}
+	.football-coach-button:hover:not(:disabled) {
+		background: #304759;
+		color: white;
+		text-decoration: none;
+	}
+	.football-coach-button.is-active {
+		color: #101923;
+		background: var(--coach-accent);
+		border-color: var(--coach-accent);
+	}
+	.football-coach-button.is-primary {
+		color: #101923;
+		background: var(--coach-accent);
+		border-color: var(--coach-accent);
+	}
+	.football-coach-button.is-subtle {
+		background: transparent;
+		border-color: var(--coach-border);
+		color: #b8c7d3;
+	}
+	.football-coach-scoreboard {
+		display: grid;
+		grid-template-columns: 1fr 190px 1fr;
+		gap: 0;
+		overflow: hidden;
+		border: 1px solid var(--coach-border);
+		border-radius: 10px;
+		background: #0d141c;
+	}
+	.football-coach-team {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 16px 18px;
+		border-top: 3px solid var(--team-color, #577388);
+		min-width: 0;
+	}
+	.football-coach-team-name {
+		font-weight: 800;
+		font-size: 15px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.football-coach-team-meta {
+		font-size: 10px;
+		color: var(--coach-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+	}
+	.football-coach-team-copy {
+		flex: 1;
+		min-width: 0;
+	}
+	.football-coach-score {
+		font-size: 38px;
+		line-height: 1;
+		font-weight: 850;
+		font-variant-numeric: tabular-nums;
+	}
+	.football-coach-clock {
+		padding: 13px 8px;
+		text-align: center;
+		background: #202e3b;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		border-left: 1px solid var(--coach-border);
+		border-right: 1px solid var(--coach-border);
+	}
+	.football-coach-time {
+		font-variant-numeric: tabular-nums;
+		font-size: 27px;
+		font-weight: 800;
+		line-height: 1.2;
+		letter-spacing: -0.03em;
+	}
+	.football-coach-timeouts {
+		display: flex;
+		gap: 4px;
+		margin-top: 6px;
+	}
+	.football-coach-timeouts span {
+		display: block;
+		width: 14px;
+		height: 3px;
+		background: #3a4b58;
+		border-radius: 2px;
+	}
+	.football-coach-timeouts span.is-available {
+		background: var(--coach-accent);
+	}
+	.football-coach-situation {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 10px;
+		border-bottom: 1px solid var(--coach-border);
+		padding: 11px 2px;
+		margin-bottom: 16px;
+	}
+	.football-coach-possession {
+		color: var(--coach-accent);
+		font-weight: 750;
+	}
+	.football-coach-layout {
+		display: grid;
+		grid-template-columns: minmax(310px, 0.88fr) minmax(430px, 1.12fr);
+		gap: 18px;
+		align-items: start;
+	}
+	.football-coach-field-panel {
+		position: relative;
+		border: 1px solid #355b4a;
+		border-radius: 10px;
+		overflow: hidden;
+		background: #183c2e;
+	}
+	.football-coach-field {
+		display: block;
+		width: 100%;
+		height: auto;
+		max-height: 720px;
+	}
+	.football-coach-field-caption {
+		display: flex;
+		justify-content: space-between;
+		padding: 9px 12px;
+		color: #c0d2c7;
+		font-size: 10px;
+		background: #112e23;
+	}
+	.football-coach-player {
+		cursor: pointer;
+		outline: none;
+	}
+	.football-coach-player:hover .football-coach-player-ring,
+	.football-coach-player:focus .football-coach-player-ring {
+		stroke: #fff;
+		stroke-width: 4;
+	}
+	.football-coach-panel {
+		background: var(--coach-panel);
+		border: 1px solid var(--coach-border);
+		border-radius: 10px;
+		padding: 15px;
+	}
+	.football-coach-panel-title {
+		font-size: 13px;
+		font-weight: 750;
+		margin: 0 0 12px;
+	}
+	.football-coach-tabs {
+		display: flex;
+		border-bottom: 1px solid var(--coach-border);
+		margin-bottom: 14px;
+		gap: 20px;
+	}
+	.football-coach-tab {
+		border: 0;
+		background: transparent;
+		color: var(--coach-muted);
+		padding: 0 0 11px;
+		font-weight: 750;
+		border-bottom: 2px solid transparent;
+	}
+	.football-coach-tab.is-active {
+		color: white;
+		border-bottom-color: var(--coach-accent);
+	}
+	.football-coach-category-tabs {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 5px;
+		background: #0e1822;
+		border-radius: 8px;
+		padding: 4px;
+		margin-bottom: 13px;
+	}
+	.football-coach-category {
+		padding: 8px 3px;
+		border: none;
+		border-radius: 5px;
+		background: transparent;
+		color: #b9c7d3;
+		font-weight: 750;
+	}
+	.football-coach-category.is-active {
+		background: #344958;
+		color: #fff;
+	}
+	.football-coach-playcards {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 8px;
+		max-height: 390px;
+		overflow-y: auto;
+		padding: 3px;
+		margin: -3px;
+	}
+	.football-coach-playcard {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		min-width: 0;
+		padding: 10px;
+		text-align: left;
+		color: #e4edf3;
+		background: #15232e;
+		border: 1px solid #344754;
+		border-radius: 8px;
+		cursor: pointer;
+	}
+	.football-coach-playcard:hover:not(:disabled) {
+		background: #203443;
+		border-color: #6a899c;
+	}
+	.football-coach-playcard.is-selected {
+		border-color: var(--coach-accent);
+		box-shadow: inset 0 0 0 1px var(--coach-accent);
+		background: #29352f;
+	}
+	.football-coach-playcard-name {
+		font-size: 12px;
+		line-height: 1.2;
+		font-weight: 750;
+		min-height: 29px;
+	}
+	.football-coach-playcard-meta {
+		color: #93aabc;
+		font-size: 10px;
+		margin-top: 4px;
+	}
+	.football-coach-playcard svg {
+		width: 100%;
+		height: 68px;
+		margin: 7px 0 0;
+	}
+	.football-coach-play-description {
+		color: #a5bac8;
+		font-size: 11px;
+		line-height: 1.5;
+		margin: 12px 0 0;
+	}
+	.football-coach-settings {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+		margin-top: 13px;
+	}
+	.football-coach-label {
+		display: block;
+		color: #a5b7c5;
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		font-weight: 750;
+		margin-bottom: 6px;
+	}
+	.football-coach-select {
+		display: block;
+		width: 100%;
+		border: 1px solid #415563;
+		border-radius: 6px;
+		padding: 8px;
+		background: #101c27;
+		color: #eef3f6;
+	}
+	.football-coach-chip-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 5px;
+	}
+	.football-coach-chip {
+		background: #233643;
+		border: 1px solid #405767;
+		border-radius: 5px;
+		padding: 6px 9px;
+		color: #cddbe4;
+		font-size: 11px;
+		font-weight: 650;
+	}
+	.football-coach-chip.is-active {
+		color: #13202a;
+		border-color: #81d4eb;
+		background: #81d4eb;
+	}
+	.football-coach-receiver {
+		display: flex;
+		gap: 12px;
+		align-items: center;
+		margin-bottom: 12px;
+	}
+	.football-coach-player-number {
+		width: 42px;
+		height: 42px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		border-radius: 9px;
+		background: #2c414f;
+		border: 1px solid #547182;
+		color: #f0f4f7;
+		font-size: 17px;
+		font-weight: 800;
+	}
+	.football-coach-player-name {
+		font-weight: 750;
+		font-size: 14px;
+	}
+	.football-coach-receiver-detail {
+		margin-top: 13px;
+	}
+	.football-coach-route-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 5px;
+	}
+	.football-coach-defense-cards {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 6px;
+	}
+	.football-coach-defense {
+		text-align: left;
+		padding: 9px;
+		border-radius: 6px;
+		border: 1px solid #405360;
+		background: #16242f;
+		color: #c4d2dd;
+	}
+	.football-coach-defense.is-selected {
+		color: #fff;
+		background: #403336;
+		border-color: #e4978e;
+	}
+	.football-coach-defense small {
+		display: block;
+		margin-top: 3px;
+		color: #a3b4c1;
+		font-size: 10px;
+	}
+	.football-coach-snapbar {
+		position: sticky;
+		bottom: 0;
+		z-index: 4;
+		margin-top: 14px;
+		background: #111923f5;
+		padding: 12px 0 0;
+		border-top: 1px solid var(--coach-border);
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 10px;
+		align-items: center;
+	}
+	.football-coach-snap {
+		border: 0;
+		border-radius: 8px;
+		background: var(--coach-accent);
+		color: #16212a;
+		padding: 13px 30px;
+		font-size: 14px;
+		font-weight: 850;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.football-coach-snap:hover:not(:disabled) {
+		background: #ffd071;
+	}
+	.football-coach-specials {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-top: 12px;
+	}
+	.football-coach-management {
+		margin-top: 13px;
+	}
+	.football-coach-log {
+		margin-top: 14px;
+	}
+	.football-coach-log-items {
+		max-height: 210px;
+		overflow-y: auto;
+	}
+	.football-coach-log-item {
+		display: grid;
+		grid-template-columns: 46px 1fr;
+		gap: 10px;
+		border-top: 1px solid #2a3b47;
+		padding: 10px 0;
+		font-size: 11px;
+		line-height: 1.55;
+	}
+	.football-coach-log-time {
+		color: #8da6b9;
+		font-variant-numeric: tabular-nums;
+		font-size: 10px;
+	}
+	.football-coach-error {
+		color: #ffd3cb;
+		background: #522e2a;
+		border: 1px solid #aa6259;
+		padding: 12px;
+		border-radius: 7px;
+		margin-bottom: 12px;
+	}
+	.football-coach-roster-list {
+		max-height: 480px;
+		overflow: auto;
+	}
+	.football-coach-roster-player {
+		display: grid;
+		grid-template-columns: 31px 34px 1fr 34px;
+		width: 100%;
+		gap: 8px;
+		align-items: center;
+		text-align: left;
+		padding: 10px 7px;
+		border: 0;
+		border-bottom: 1px solid #2d414e;
+		background: transparent;
+		color: #dbe6ed;
+	}
+	.football-coach-roster-player.is-selected {
+		background: #304755;
+	}
+	.football-coach-ratings {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 10px;
+		margin-top: 12px;
+	}
+	.football-coach-rating-label {
+		display: flex;
+		justify-content: space-between;
+		font-size: 10px;
+		color: #c8d6e0;
+		margin-bottom: 4px;
+	}
+	.football-coach-rating-track {
+		height: 4px;
+		border-radius: 5px;
+		background: #324756;
+		overflow: hidden;
+	}
+	.football-coach-rating-track span {
+		display: block;
+		height: 100%;
+		background: #7bc4c7;
+		border-radius: 5px;
+	}
+	.football-coach-clock-actions {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+		margin-top: 12px;
+	}
+	.football-coach-empty {
+		padding: 40px 18px;
+		text-align: center;
+		color: #a3b6c5;
+	}
+	@media (max-width: 1150px) {
+		.football-coach-layout {
+			grid-template-columns: minmax(270px, 0.78fr) minmax(350px, 1fr);
+			gap: 12px;
+		}
+		.football-coach-scoreboard {
+			grid-template-columns: 1fr 130px 1fr;
+		}
+		.football-coach-team {
+			gap: 8px;
+			padding: 12px;
+		}
+		.football-coach-team-name {
+			font-size: 12px;
+		}
+		.football-coach-score {
+			font-size: 32px;
+		}
+		.football-coach-playcards {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	@media (max-width: 800px) {
+		padding: 11px;
+		.football-coach-toolbar {
+			align-items: flex-start;
+		}
+		.football-coach-layout {
+			grid-template-columns: 1fr;
+		}
+		.football-coach-field {
+			max-height: 540px;
+		}
+		.football-coach-playcards {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			max-height: none;
+		}
+		.football-coach-scoreboard {
+			grid-template-columns: 1fr 90px 1fr;
+		}
+		.football-coach-team {
+			padding: 10px 8px;
+			gap: 6px;
+			flex-wrap: wrap;
+		}
+		.football-coach-team-name {
+			font-size: 12px;
+		}
+		.football-coach-score {
+			font-size: 28px;
+		}
+		.football-coach-time {
+			font-size: 21px;
+		}
+		.football-coach-situation {
+			font-size: 11px;
+		}
+	}
+	@media (max-width: 440px) {
+		.football-coach-toolbar {
+			flex-direction: column;
+		}
+		.football-coach-team-copy {
+			flex-basis: calc(100% - 45px);
+		}
+		.football-coach-score {
+			margin-left: 0;
+		}
+		.football-coach-team-meta {
+			font-size: 8px;
+		}
+		.football-coach-playcards {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.football-coach-settings {
+			grid-template-columns: 1fr;
+		}
+		.football-coach-defense-cards {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.football-coach-snap {
+			padding: 12px 20px;
+		}
+	}
+}

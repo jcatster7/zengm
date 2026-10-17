@@ -67,7 +67,14 @@ const DailySchedule = ({
 		phase,
 		season: currentSeason,
 		userTid,
-	} = useLocal(["gameSimInProgress", "phase", "season", "userTid"]);
+		spectator,
+	} = useLocal([
+		"gameSimInProgress",
+		"phase",
+		"season",
+		"userTid",
+		"spectator",
+	]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -155,8 +162,9 @@ const DailySchedule = ({
 							{upcomingAndCompleted ? <h2>Upcoming Games</h2> : null}
 							{__SPORT === "football" && isToday && !tradeDeadline ? (
 								<p className="text-body-secondary">
-									Sim game opens play calling. Choose each play and manage the
-									clock, or use Quick sim to finish automatically.
+									Sim game lets you coach your selected team on offense and
+									defense. Other matchups simulate automatically. Quick sim
+									finishes your game automatically.
 								</p>
 							) : null}
 							<div className="d-flex flex-wrap" style={{ gap: "1rem 2rem" }}>
@@ -195,7 +203,11 @@ const DailySchedule = ({
 															simulateGame(
 																game.gid,
 																__SPORT === "football" &&
-																	game.teams.every((team) => team.tid >= 0),
+																	!spectator &&
+																	game.teams.every((team) => team.tid >= 0) &&
+																	game.teams.some(
+																		(team) => team.tid === userTid,
+																	),
 															),
 													},
 												]
