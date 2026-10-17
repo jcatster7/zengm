@@ -24,22 +24,23 @@ Implemented on `feat/football-interactive-sim`, based on the official
 - [x] Verify overtime in Chrome and durable database reopening through native integration tests.
 - [x] Run four representative local league exports through native import components, team loading, and complete game simulation.
 - [x] Identify the requested data source: the Week 5 v25 native league export.
-- [ ] Finish the Week 5 export's browser import and full-game acceptance test.
+- Skipped at Justin's request: the Week 5 export's browser import and full-game acceptance test remains unverified.
 - [x] Compare observable reference behavior and empirical rushing distributions; document remaining fidelity gaps.
 
-### Remaining verification work
+### Additional verification
 
 - [x] Exercise the Week 5 export through the complete native league-creation,
       coached-game, save, and database-reopen path in an isolated test database.
 - [x] Measure complete-game output against observed NFL aggregates, separating
       real observations from simulation results and checking clock policy.
-- [ ] Finish the separate browser-file acceptance check once Chrome file access
-      is enabled; the extension still rejected file selection on recheck.
+- Skipped at Justin's request on 2026-10-17: the separate browser-file
+  acceptance check after Chrome continued rejecting file selection.
 
-The Week 5 file is identified below. Chrome's extension currently requires
-"Allow access to file URLs" before its file chooser can select the local export.
+The Week 5 file is identified below, and its native import/game/save/reopen test
+passed. Justin explicitly chose to skip the remaining Chrome import check.
 The completed Chrome games use a separate generated test league; they do not
-establish that the Week 5 browser import has passed.
+establish that the Week 5 browser import has passed. No further permission
+troubleshooting is part of this verification task.
 
 ## Run privately
 
@@ -190,9 +191,11 @@ and timeouts were controllable. A timeout reduced SF's count while leaving
 Atlanta's unchanged; punts and turnovers switched to SF defensive controls.
 All eight native player-stat categories remained available below the field.
 After switching leagues, reloading Chrome, and reopening the saved box score,
-all displayed cells across 69 player rows and the scoring summary matched the
-final live tables. Comparisons use player identity within each category because
-rows tied on the sorted statistic can change order after saving.
+displayed statistic cells across 69 player rows and the captured scoring-summary
+values matched the final live tables. The scoring-summary capture omitted its
+first two columns and quarter labels, so it does not prove every summary cell.
+Comparisons use player identity within each category because rows tied on the
+sorted statistic can change order after saving.
 
 A second game placed SF away at SEA with one-minute regulation and overtime
 periods. It reached OT1, reset each team's timeouts to two, retained SF-only
@@ -261,7 +264,8 @@ team-season, schedule, and game-attribute record matched their pre-close values.
 The native Game Log reopened the result, and repeated completion did not create
 a duplicate. Upload inspection found zero schema errors; the source hash was
 unchanged. This establishes the native worker/database path, while the separate
-Chrome file-chooser and browser-storage acceptance check remains pending.
+Chrome file-chooser and browser-storage acceptance check was explicitly skipped
+by Justin and remains unverified.
 
 ### Reference comparison and rushing correction
 
