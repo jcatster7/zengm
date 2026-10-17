@@ -198,8 +198,10 @@ export const FootballCoachDataPanel = ({
 							{links.length} of {roster.length}
 						</strong>{" "}
 						players in this matchup have a unique NFL identity match. Reference
-						seasons: {reference.seasons.join(", ")}. Unmatched players keep
-						their native Football GM simulation.
+						seasons: {reference.seasons.join(", ")}. All players use their
+						league ratings. Historical play samples apply by play type,
+						regardless of identity matches; saving links does not change a
+						player's ratings or individual probabilities.
 					</p>
 					<div className="d-flex flex-wrap align-items-center gap-2 mb-3">
 						<button

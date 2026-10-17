@@ -368,6 +368,7 @@ const interactiveGame = async (gid: number, conditions: Conditions) => {
 					seasonNumber,
 					gid,
 				]),
+				result,
 			);
 		})().catch(async (error: unknown) => {
 			footballCoach.fail(lid, error);

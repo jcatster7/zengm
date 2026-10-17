@@ -27,6 +27,15 @@ Implemented on `feat/football-interactive-sim`, based on the official
 - [ ] Finish the Week 5 export's browser import and full-game acceptance test.
 - [x] Compare observable reference behavior and empirical rushing distributions; document remaining fidelity gaps.
 
+### Remaining verification work
+
+- [x] Exercise the Week 5 export through the complete native league-creation,
+      coached-game, save, and database-reopen path in an isolated test database.
+- [x] Measure complete-game output against observed NFL aggregates, separating
+      real observations from simulation results and checking clock policy.
+- [ ] Finish the separate browser-file acceptance check once Chrome file access
+      is enabled; the extension still rejected file selection on recheck.
+
 The Week 5 file is identified below. Chrome's extension currently requires
 "Allow access to file URLs" before its file chooser can select the local export.
 The completed Chrome games use a separate generated test league; they do not
@@ -86,6 +95,8 @@ tables for both teams. They use the native table renderer and cumulative game
 statistics, updating after every play and remaining visible after the final.
 Player links, injuries, jersey numbers, derived averages, and column sorting
 retain their usual behavior. The capped recent-play log is not used for totals.
+Injuries sustained during play remain undiagnosed until native saving completes;
+the final live tables then show the same diagnosis as the saved box score.
 
 The worker owns one native simulator and accepts only validated decisions with
 session/revision tokens. The normal Football GM pipeline saves player and team
@@ -118,7 +129,10 @@ are serialized in an IndexedDB transaction. Player names and league files are
 not uploaded to the reference site or a matching service.
 
 This bridge joins player identities; it does not overwrite league ratings or
-synchronize workbook formulas. Justin identified the requested data source as
+synchronize workbook formulas. Historical samples apply by play type to matched
+and unmatched players alike. Identity links do not select player-specific
+probabilities. The Data panel now states this explicitly.
+Justin identified the requested data source as
 `2026 Week 5 NFL Real Players - Postgame v25.0.json.gz`, rather than a spreadsheet.
 Use the native custom-league importer for its rosters, ratings, depth charts,
 injuries, and league configuration. The inspected file contains 4,128 players,
@@ -140,10 +154,11 @@ SPORT=football node --run build
 
 On the development machine's Node 25 runtime, tests were run with
 `NODE_OPTIONS=--no-experimental-webstorage` to disable its incompatible native
-localStorage implementation. The latest three-project Node suite passed 692
-tests with 13 skipped (including the opt-in local-export test when no paths are
-provided), across 74 passing files and two skipped files. Full lint, TypeScript,
-and production build `2026.10.17.0859` passed. This is not a claim of perfect
+localStorage implementation. The latest three-project Node suite passed 777
+tests with 15 skipped (including opt-in local-export and diagnostic tests when
+no paths are provided), across 74 passing files and four skipped files.
+Full lint, TypeScript, and production build `2026.10.17.0868` passed.
+This is not a claim of perfect
 compatibility with every league export.
 
 Coverage checks exact seeded automatic/native result parity, every tactical call,
@@ -187,6 +202,14 @@ after reload. Chrome reported no warning/error console entries. These browser
 runs used build `2026.10.16.1358`, before the empirical rushing correction below;
 they establish the existing controls and persistence behavior.
 
+On build `2026.10.17.0868`, a third game in that same generated league finished
+automatically at SF 17–CHA 20 and reported its statistics saved. Chrome displayed
+the corrected Data-tab explanation. A newly injured player's final live receiving
+and blocking rows, including the finalized injury duration, matched the saved
+Game Log rows exactly. No console warnings or errors were recorded. This smoke
+check verifies the new presentation changes; it is separate from the full manual
+control and overtime acceptance runs above.
+
 ### Local-export compatibility
 
 `footballCoachCompatibility.football.test.ts` accepts a JSON array of absolute
@@ -216,6 +239,30 @@ rosters or evidence of era-authentic rules. All seven scenarios preserve exact
 automatic-versus-interactive-auto results. The harness tests native import
 components, not the complete browser upload/database migration.
 
+### Full Week 5 import and persistence
+
+`footballCoachFullImport.football.test.ts` accepts one absolute export path in
+`FOOTBALL_COACH_FULL_IMPORT_FILE`. Unlike the component compatibility harness,
+it runs the native upload inspection, `createLeague`/`createStream`, production
+coaching APIs, native save pipeline, and a database disconnect/reopen. It uses
+a fresh isolated fake-indexeddb factory; it does not access browser databases.
+
+The Week 5 v25 export migrated from file version 72 into database version 74.
+It preserved all 4,128 player identities and club assignments, 57 clubs,
+327 starting injuries, 273 scheduled games, and the checked league settings.
+The selected club (31) coached an away game against club 28. All 16 unavailable
+matchup players stayed out, and eight empirical play profiles were exercised.
+The test compared 6,156 raw counters across 81 saved participants, verified
+25 nonparticipants had zero counters, and matched final live injury metadata to
+saved diagnoses. Exactly one game was saved and removed from the schedule.
+
+After closing and reconnecting, the saved game and every player, team, team-stat,
+team-season, schedule, and game-attribute record matched their pre-close values.
+The native Game Log reopened the result, and repeated completion did not create
+a duplicate. Upload inspection found zero schema errors; the source hash was
+unchanged. This establishes the native worker/database path, while the separate
+Chrome file-chooser and browser-storage acceptance check remains pending.
+
 ### Reference comparison and rushing correction
 
 The rendered [reference game](https://nfl2mindrill.com/) was inspected in Chrome,
@@ -237,6 +284,43 @@ Nine regression tests verify every observed yard value at a neutral matchup,
 50,000 weighted samples against the source mean/loss/20-yard rates, and unchanged
 seeded native fallbacks. This verifies sampling integrity, not held-out
 full-game NFL calibration or equivalence to the reference's proprietary engine.
+
+### Whole-game realism diagnostic
+
+The opt-in `footballCoachCalibration.football.test.ts` produced
+[the complete comparison report](data/football-coach-calibration.json) from the
+unchanged Week 5 file and hash-verified cached nflverse/FTN sources. Its 64 matchups
+give each active club four appearances against two opponents, two home games,
+one coached home game, and one coached away game. Each matchup runs in native
+automatic, interactive automatic, and tactical modes (192 complete games).
+All 64 automatic/interactive-automatic pairs were exactly equal.
+
+The declared tactical policy uses varied concepts, native run/pass decisions,
+normal huddling, situational late-game tempo, and only the selected club's
+offense, defense, and timeouts. The report includes its seeds, call counts,
+denominators, full game aggregates, and bootstrap intervals. Actual NFL totals
+include kneels and spikes; throws exclude sacks and conversions. Real observations
+and simulation outputs are separate cohorts throughout.
+
+| Metric                          | Observed NFL 2025 | Native automatic | Coached team | Coached opponent |
+| ------------------------------- | ----------------: | ---------------: | -----------: | ---------------: |
+| Points per team game            |             22.98 |            24.59 |        24.53 |            21.00 |
+| Offensive plays per team game   |             61.46 |            61.77 |        63.39 |            59.72 |
+| Completion rate                 |            63.97% |           61.83% |       67.93% |           57.98% |
+| Sack rate per pass play         |             6.86% |            7.12% |        5.30% |            6.84% |
+| Interceptions per throw         |             2.21% |            2.39% |        2.80% |            3.42% |
+| Rushing yards per attempt       |              4.34 |             4.86 |         4.32 |             4.78 |
+| Gross passing yards per attempt |              7.00 |             7.09 |         7.57 |             6.64 |
+
+Play volume and coached rushing averages are close in this sample. Passing
+efficiency and interception rates remain uneven between coached clubs and their
+opponents, so this does not establish NFL calibration. The fixed 2026 roster,
+limited opponent set, and declared policy differ from the observed 2025 schedule;
+bootstrap intervals describe these sampled games, not all possible leagues or
+coaching strategies. The historical seasons also supply the empirical profiles,
+so this is not held-out validation. No engine coefficients were fitted to these
+results. Further passing/defensive balance work should use separate validation
+games and examine the underlying interactions before changing probabilities.
 
 ## Scope and license
 

@@ -4,6 +4,7 @@ import type {
 	FootballCoachSnapshot,
 } from "../../../common/footballCoach.ts";
 import type { FootballCoachSession } from "../../../common/footballCoachSession.ts";
+import type { Game } from "../../../common/types.ts";
 import { FootballCoachController } from "./footballCoach.ts";
 
 const makeInput = (): Pick<
@@ -644,11 +645,35 @@ test("a coached native game saves one box score and normal league stats before c
 	const { footballCoach } = await import("./footballCoach.ts");
 	const { default: play } = await import("./play.ts");
 	const { default: closeLeague } = await import("../league/close.ts");
+	const { default: GameSimFootball } =
+		await import("../GameSim.football/index.ts");
 	const originalLeague = idb.league;
 	const originalCache = idb.cache;
+	const nativeInjuries = GameSimFootball.prototype.injuries;
+	const injuryRoll = vi
+		.spyOn(GameSimFootball.prototype, "injuries")
+		.mockImplementationOnce(function (
+			this: InstanceType<typeof GameSimFootball>,
+		) {
+			// Trigger one native injury on the first snap. Diagnosis and all save
+			// work remain the real pipeline, rather than a fabricated box score.
+			const originalRate = this.baseInjuryRate;
+			this.baseInjuryRate = 0.001;
+			const random = vi
+				.spyOn(Math, "random")
+				.mockReturnValue(0.99)
+				.mockReturnValueOnce(0);
+			try {
+				nativeInjuries.call(this);
+			} finally {
+				random.mockRestore();
+				this.baseInjuryRate = originalRate;
+			}
+		});
 	const flushEntered = deferred();
 	const releaseFlush = deferred();
 	let completion: Promise<void> | undefined;
+	let completionResult: Game | undefined;
 	try {
 		resetG();
 		local.reset();
@@ -691,10 +716,28 @@ test("a coached native game saves one box score and normal league stats before c
 		});
 		footballCoach.automate(7, session.sessionId, "end");
 		let decisions = 0;
+		let sawUnknownInjury = false;
 		completion = play(1, {}, true, 42, true, (snapshot) => {
 			decisions += 1;
+			for (const injured of snapshot
+				.boxScore!.teams.flatMap((team) => team.players)
+				.filter((p) => p.newInjury)) {
+				assert.deepEqual(injured.injury, {
+					type: "Injured",
+					gamesRemaining: -1,
+					playingThrough: false,
+				});
+				sawUnknownInjury = true;
+			}
 			return footballCoach.next(7, snapshot);
-		}).then(() => footballCoach.complete(7, "/l/7/game_log/HOM_0/2016/42"));
+		}).then(async () => {
+			completionResult = structuredClone((await idb.merged.games.get(42))!);
+			footballCoach.complete(
+				7,
+				"/l/7/game_log/HOM_0/2016/42",
+				completionResult,
+			);
+		});
 		footballCoach.track(completion);
 		await Promise.race([
 			flushEntered.promise,
@@ -745,6 +788,25 @@ test("a coached native game saves one box score and normal league stats before c
 		);
 		const finalBoxScore = finalSnapshot.boxScore!;
 		assert.isDefined(finalBoxScore);
+		assert.isTrue(sawUnknownInjury);
+		const newlyInjured = finalBoxScore.teams
+			.flatMap((team) => team.players)
+			.filter((p) => p.newInjury);
+		assert.lengthOf(newlyInjured, 1);
+		const injuredPid = newlyInjured[0]!.id;
+		const savedInjured = games[0]!.teams
+			.flatMap((team) => team.players)
+			.find((p) => p.pid === injuredPid)!;
+		const diagnosedInjury = structuredClone(savedInjured.injury);
+		assert.isTrue(diagnosedInjury.newThisGame);
+		assert.notEqual(diagnosedInjury.type, "Injured");
+		assert.isAtLeast(diagnosedInjury.gamesRemaining, 0);
+		const savedPlayer = players.find((p) => p.pid === injuredPid)!;
+		assert.strictEqual(savedPlayer.injury.type, diagnosedInjury.type);
+		assert.strictEqual(
+			savedPlayer.injury.gamesRemaining,
+			diagnosedInjury.gamesRemaining,
+		);
 		assert.deepEqual(finalBoxScore.scoringSummary, games[0]!.scoringSummary);
 		// Use the native stat registry so every passing, rushing, receiving,
 		// defense, kicking, return, penalty, and blocking counter is covered.
@@ -793,11 +855,36 @@ test("a coached native game saves one box score and normal league stats before c
 		await completion;
 		await closing;
 		assert.strictEqual(footballCoach.get(7)!.status, "complete");
-		assert.deepEqual(footballCoach.get(7)!.snapshot!.boxScore, finalBoxScore);
+		const completedBoxScore = footballCoach.get(7)!.snapshot!.boxScore!;
+		const completedInjured = completedBoxScore.teams
+			.flatMap((team) => team.players)
+			.find((p) => p.id === injuredPid)!;
+		assert.deepEqual(completedInjured.injury, {
+			...diagnosedInjury,
+			playingThrough: false,
+		});
+		// Every raw statistic and all other metadata stay unchanged. Only the
+		// diagnosed injury replaces the live unknown label after saving finishes.
+		const expectedFinalBoxScore = structuredClone(finalBoxScore);
+		expectedFinalBoxScore.teams
+			.flatMap((team) => team.players)
+			.find((p) => p.id === injuredPid)!.injury = completedInjured.injury;
+		assert.deepEqual(completedBoxScore, expectedFinalBoxScore);
+		completionResult!.teams
+			.flatMap((team) => team.players)
+			.find((p) => p.pid === injuredPid)!.injury.type = "mutated saved result";
+		assert.deepEqual(
+			footballCoach.get(7)!.snapshot!.boxScore,
+			completedBoxScore,
+			"Completed injury metadata must not alias the saved result",
+		);
 		assert.strictEqual(flushes, 1);
 		footballCoach.automate(7, session.sessionId, "end");
 		await footballCoach.finishBeforeClosingLeague();
-		assert.deepEqual(footballCoach.get(7)!.snapshot!.boxScore, finalBoxScore);
+		assert.deepEqual(
+			footballCoach.get(7)!.snapshot!.boxScore,
+			completedBoxScore,
+		);
 		assert.strictEqual((await idb.cache.games.getAll()).length, 1);
 		assert.deepEqual(
 			(await idb.cache.teamStats.getAll())
@@ -811,6 +898,7 @@ test("a coached native game saves one box score and normal league stats before c
 			"Repeated finish requests must not run or save the game again",
 		);
 	} finally {
+		injuryRoll.mockRestore();
 		releaseFlush.resolve();
 		if (completion) {
 			await completion.catch(() => {});

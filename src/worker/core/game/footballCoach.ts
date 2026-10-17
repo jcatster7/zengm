@@ -3,6 +3,7 @@ import type {
 	FootballCoachSnapshot,
 } from "../../../common/footballCoach.ts";
 import type { FootballCoachSession } from "../../../common/footballCoachSession.ts";
+import type { Game } from "../../../common/types.ts";
 import { validateFootballCoachDecision } from "../../../common/footballCoachPlaybook.ts";
 
 // Only this worker owns the live native simulator. The UI gets detached snapshots
@@ -214,9 +215,35 @@ export class FootballCoachController {
 		this.session.revision += 1;
 	}
 
-	complete(lid: number, boxScoreUrl: string) {
+	complete(
+		lid: number,
+		boxScoreUrl: string,
+		savedGame?: Pick<Game, "gid" | "teams">,
+	) {
 		if (this.session?.lid !== lid) {
 			return;
+		}
+		if (savedGame) {
+			if (savedGame.gid !== this.session.gid) {
+				throw new Error("The saved game does not match the coaching session.");
+			}
+			// Native persistence diagnoses injuries after the final simulation
+			// snapshot. Reconcile only that metadata, keeping live totals intact.
+			for (const team of this.session.snapshot?.boxScore?.teams ?? []) {
+				const savedTeam = savedGame.teams.find((t) => t.tid === team.id);
+				const savedPlayers = new Map(
+					savedTeam?.players.map((player) => [player.pid, player]),
+				);
+				for (const player of team.players) {
+					const savedPlayer = savedPlayers.get(player.id);
+					if (savedPlayer) {
+						player.injury = {
+							...structuredClone(savedPlayer.injury),
+							playingThrough: !!savedPlayer.injury.playingThrough,
+						};
+					}
+				}
+			}
 		}
 		this.session.status = "complete";
 		this.session.boxScoreUrl = boxScoreUrl;

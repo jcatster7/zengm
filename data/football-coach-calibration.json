@@ -1,0 +1,4175 @@
+{
+	"schemaVersion": 1,
+	"generatedAt": "2026-10-17T21:28:02.323Z",
+	"purpose": "Full-game diagnostic; observed NFL data and simulated league games are distinct cohorts, not a fitted or validated replica of the reference website.",
+	"implementation": [
+		{
+			"path": "src/worker/core/game/footballCoachCalibration.football.test.ts",
+			"sha256": "ad126697bede3fac37e8ce75db05415b26f35af36d4484bfa217800e1411aad6"
+		},
+		{
+			"path": "src/worker/core/GameSim.football/index.ts",
+			"sha256": "6eb7fb9584fb372b65d63f39227b76b0691d44d65601bc1acd9caf382b2ed59c"
+		},
+		{
+			"path": "src/worker/core/GameSim.football/Play.ts",
+			"sha256": "387d8d8fd10867906508363962d763cc79ae62362e56490da5830cbb61cf6893"
+		},
+		{
+			"path": "src/common/footballCoachPlaybook.ts",
+			"sha256": "bbaba68261c99247d8333bc9817270004f07d9014602d669aa5500cf4f01afb4"
+		}
+	],
+	"limitations": [
+		"Simulation uses one fixed 2026 Week5 league roster, ratings, depth charts, and injury state; each game starts fresh. This is not a simulation of actual 2025 NFL rosters or results.",
+		"The 64-game design covers two opponents per club. Bootstrap intervals resample these games conditional on these fixed rosters, matchups, policy, and engine settings; they do not represent uncertainty across roster releases, policies, or model parameters and do not establish general NFL calibration.",
+		"The 2023–2025 observed comparison overlaps the empirical reference's training period. It is descriptive benchmarking, not held-out validation.",
+		"Named offensive tactics, defensive choices, personnel, timing, and empirical sampling change together. These comparisons do not isolate the causal effect of any one component.",
+		"Call counts record submitted decisions, including calls replayed after pre-snap penalties. Game-stat denominators record credited plays only.",
+		"This harness reads and normalizes the native export and runs GameSim in memory. It does not test browser upload, full createStream migrations, or persistence.",
+		"The observed play-type filter excludes rare pass-attempt flags on no_play or special-teams rows, including two 2025 rows (intentional grounding and a blocked-field-goal recovery pass). Observed counts are not claimed to reproduce every official season total exactly.",
+		"The tactical callback calls native getPlayType(), which consumes native randomness. Its named play, formation, and clock branches also change subsequent random consumption. Shared seeds pair scenarios; only automatic versus undefined-decision interactive-auto is asserted draw-for-draw equal."
+	],
+	"league": {
+		"sha256": "dc751cbfea499fdade9699168d9f6b6c85b7c120dd7abe13c35ced007703d329",
+		"version": 72,
+		"season": 2026,
+		"players": 4128,
+		"activeTeams": 32,
+		"sourceUnchanged": true
+	},
+	"reference": {
+		"sha256": "2e94f2387fe73dccb85b4776d9a36db2e0f69405e1dcd3503a008ede4d2b27fd",
+		"seasons": [2023, 2024, 2025],
+		"verifiedSources": [
+			{
+				"name": "nflverse play-by-play 2023",
+				"url": "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2023.csv.gz",
+				"license": "https://creativecommons.org/licenses/by/4.0/",
+				"sha256": "4649804ee0f0a40b41e51ec75a1ce921949d7fab5459213488656b92f78560e8",
+				"bytes": 19169807,
+				"cacheHashVerified": true
+			},
+			{
+				"name": "FTN Data via nflverse 2023",
+				"url": "https://github.com/nflverse/nflverse-data/releases/download/ftn_charting/ftn_charting_2023.csv",
+				"license": "https://creativecommons.org/licenses/by-sa/4.0/",
+				"sha256": "6045bbca32c1f61d32d9cf66e7cf6355f583b90c8ac2f5ed155d733ec335e8d7",
+				"bytes": 8285822,
+				"cacheHashVerified": true
+			},
+			{
+				"name": "nflverse play-by-play 2024",
+				"url": "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2024.csv.gz",
+				"license": "https://creativecommons.org/licenses/by/4.0/",
+				"sha256": "23370d5d10f8104d80d46a1fc5e61f4f6f5a3263fe96fe2dd629913cfcb08c06",
+				"bytes": 19362351,
+				"cacheHashVerified": true
+			},
+			{
+				"name": "FTN Data via nflverse 2024",
+				"url": "https://github.com/nflverse/nflverse-data/releases/download/ftn_charting/ftn_charting_2024.csv",
+				"license": "https://creativecommons.org/licenses/by-sa/4.0/",
+				"sha256": "6faae8118cc13ce62589210d553733128ed35e558671009b4a7a8fc5c674c2cb",
+				"bytes": 8254908,
+				"cacheHashVerified": true
+			},
+			{
+				"name": "nflverse play-by-play 2025",
+				"url": "https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2025.csv.gz",
+				"license": "https://creativecommons.org/licenses/by/4.0/",
+				"sha256": "2f135887790a013fd004e609e37096bb4816d5cc80b9f19122e1bad478961978",
+				"bytes": 19105296,
+				"cacheHashVerified": true
+			},
+			{
+				"name": "FTN Data via nflverse 2025",
+				"url": "https://github.com/nflverse/nflverse-data/releases/download/ftn_charting/ftn_charting_2025.csv",
+				"license": "https://creativecommons.org/licenses/by-sa/4.0/",
+				"sha256": "62a66416043ff08d43303bf5f3af5390e3fe0f29461a1fc6e295a15cac6ea994",
+				"bytes": 8128926,
+				"cacheHashVerified": true
+			},
+			{
+				"name": "nflverse players V2",
+				"url": "https://github.com/nflverse/nflverse-data/releases/download/players/players.csv",
+				"license": "https://creativecommons.org/licenses/by/4.0/",
+				"sha256": "d2208eb1254e7b1b6cd00d575f369ff4c58838ae1ae1e2f86e6ac56b3829c989",
+				"bytes": 7303216,
+				"cacheHashVerified": true
+			}
+		],
+		"attribution": "nflverse (PBP and player identities, CC BY 4.0); FTN Data via nflverse (charting and derived profiles, CC BY-SA 4.0)"
+	},
+	"configuration": {
+		"gamesPerMode": 64,
+		"exactAutomaticParityGames": 64,
+		"normalizationSeed": 20261017,
+		"simulationSeeds": [503000, 503063],
+		"policySeeds": [913000, 913063],
+		"quarterLength": 15,
+		"numPeriods": 4,
+		"footballOvertime": "bothPossess",
+		"pace": 1,
+		"passYdsFactor": 1,
+		"rushYdsFactor": 1,
+		"injuryRate": 0.002,
+		"teamExposures": [
+			{
+				"tid": 0,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [31, 30]
+			},
+			{
+				"tid": 1,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [30, 28]
+			},
+			{
+				"tid": 2,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [29, 27]
+			},
+			{
+				"tid": 3,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [28, 26]
+			},
+			{
+				"tid": 4,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [27, 25]
+			},
+			{
+				"tid": 5,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [26, 24]
+			},
+			{
+				"tid": 6,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [25, 23]
+			},
+			{
+				"tid": 7,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [24, 22]
+			},
+			{
+				"tid": 8,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [23, 21]
+			},
+			{
+				"tid": 9,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [22, 20]
+			},
+			{
+				"tid": 10,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [21, 19]
+			},
+			{
+				"tid": 11,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [20, 18]
+			},
+			{
+				"tid": 12,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [19, 17]
+			},
+			{
+				"tid": 13,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [18, 16]
+			},
+			{
+				"tid": 14,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [17, 15]
+			},
+			{
+				"tid": 15,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [16, 14]
+			},
+			{
+				"tid": 16,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [15, 13]
+			},
+			{
+				"tid": 17,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [14, 12]
+			},
+			{
+				"tid": 18,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [13, 11]
+			},
+			{
+				"tid": 19,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [12, 10]
+			},
+			{
+				"tid": 20,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [11, 9]
+			},
+			{
+				"tid": 21,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [10, 8]
+			},
+			{
+				"tid": 22,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [9, 7]
+			},
+			{
+				"tid": 23,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [8, 6]
+			},
+			{
+				"tid": 24,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [7, 5]
+			},
+			{
+				"tid": 25,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [6, 4]
+			},
+			{
+				"tid": 26,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [5, 3]
+			},
+			{
+				"tid": 27,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [4, 2]
+			},
+			{
+				"tid": 28,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [3, 1]
+			},
+			{
+				"tid": 29,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [2, 31]
+			},
+			{
+				"tid": 30,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [1, 0]
+			},
+			{
+				"tid": 31,
+				"games": 4,
+				"home": 2,
+				"coachedHome": 1,
+				"coachedAway": 1,
+				"opponents": [0, 29]
+			}
+		]
+	},
+	"definitions": {
+		"points": "Final team points including all scoring types; both regulation and any overtime.",
+		"offensivePlays": "Actual throws + sacks + rush attempts; includes spikes and kneels; excludes kicks, conversions, deleted/nullified plays. PBP uses run/pass/qb_kneel/qb_spike play types and statistical attempt flags. Penalties that leave credited statistics stand are included.",
+		"completion": "Completed throws / actual throws; sacks excluded.",
+		"sack": "Sacks / (actual throws + sacks); scrambles are rushes, so this is not sack/dropback rate.",
+		"interception": "Interceptions / actual throws.",
+		"rushYards": "Native rusYds or PBP rushing_yards + lateral_rushing_yards, divided by rush attempts; includes kneels/scrambles.",
+		"passYards": "Gross native pssYds or PBP credited passing_yards on completions, divided by actual throws; sack yards excluded.",
+		"uncertainty": "1000 percentile bootstrap resamples by whole game; deterministic seed872345; 2.5%/97.5% order statistics. Not significance thresholds or calibration acceptance bands."
+	},
+	"policy": {
+		"description": "Native run/pass/special-play decisions; varied named concepts; pass-depth weighting from observed throw counts, with FTN screen/RPO/trick frequencies as declared sampling choices. This is a diagnostic policy, not inferred NFL coaching behavior. Core run concepts use explicit equal/repeated weights; short-yardage sneak chance25%; situational fronts with15% blitz. Only one club is controlled per game; opponent retains native offense. Normal huddle except final-two-minute urgency/protect-lead handling and late timeouts.",
+		"clockChoices": {
+			"normal": 2001,
+			"hurryUp": 245,
+			"chewClock": 143,
+			"timeout": 162
+		},
+		"calls": {
+			"power": 217,
+			"dig": 168,
+			"curl": 162,
+			"zoneSlant": 74,
+			"counter": 197,
+			"outsideZone": 431,
+			"slant": 287,
+			"seam": 162,
+			"zoneBubble": 80,
+			"draw": 191,
+			"corner": 97,
+			"insideZone": 414,
+			"drag": 260,
+			"quickOut": 301,
+			"stick": 276,
+			"wrScreen": 120,
+			"post": 92,
+			"hitch": 282,
+			"toss": 198,
+			"go": 87,
+			"reverse": 15,
+			"rbScreen": 107,
+			"zoneFlat": 65,
+			"qbSneak": 22,
+			"halfbackPass": 7,
+			"fleaFlicker": 6
+		},
+		"defenseChoices": {
+			"nickel": 2805,
+			"blitz": 616,
+			"base43": 927,
+			"goalLine": 80,
+			"dime": 106
+		},
+		"sampledProfiles": [
+			"passDeep",
+			"passMedium",
+			"passScreen",
+			"passShort",
+			"rpo",
+			"runInside",
+			"runOutside",
+			"trick"
+		],
+		"rpoRate": 0.04999419234938826,
+		"trickRate": 0.007085333746321821
+	},
+	"observedNFL": {
+		"seasons": [
+			{
+				"season": 2023,
+				"kneels": 454,
+				"spikes": 69,
+				"gameBlocks": 285,
+				"totals": {
+					"teamGames": 570,
+					"points": 12483,
+					"throws": 19254,
+					"completions": 12427,
+					"sacks": 1459,
+					"interceptions": 443,
+					"rushes": 15284,
+					"rushYards": 64293,
+					"passYards": 135425
+				},
+				"metrics": {
+					"pointsPerTeamGame": 21.9,
+					"offensivePlaysPerTeamGame": 63.15263157894737,
+					"throwsPerTeamGame": 33.77894736842105,
+					"rushesPerTeamGame": 26.814035087719297,
+					"completionRate": 0.6454243274124857,
+					"sackRatePerPassPlay": 0.07043885482547192,
+					"interceptionRatePerThrow": 0.02300820608704685,
+					"rushYardsPerAttempt": 4.206555875425281,
+					"passYardsPerAttempt": 7.033603407084242,
+					"passPlayShare": 0.5754090618662666
+				},
+				"bootstrap95PercentIntervals": {
+					"pointsPerTeamGame": [21.11754385964912, 22.705263157894738],
+					"offensivePlaysPerTeamGame": [62.675438596491226, 63.63333333333333],
+					"throwsPerTeamGame": [33.23684210526316, 34.36842105263158],
+					"rushesPerTeamGame": [26.410526315789475, 27.24561403508772],
+					"completionRate": [0.6376603386351976, 0.6527836134453782],
+					"sackRatePerPassPlay": [0.06663438256658595, 0.07417863227062546],
+					"interceptionRatePerThrow": [
+						0.020941592184577012, 0.0250168332729062
+					],
+					"rushYardsPerAttempt": [4.106404005797866, 4.304122684724159],
+					"passYardsPerAttempt": [6.883738120380148, 7.188735584843492],
+					"passPlayShare": [0.5683613926347824, 0.5824814702559722]
+				}
+			},
+			{
+				"season": 2024,
+				"kneels": 437,
+				"spikes": 75,
+				"gameBlocks": 285,
+				"totals": {
+					"teamGames": 570,
+					"points": 13115,
+					"throws": 18580,
+					"completions": 12136,
+					"sacks": 1392,
+					"interceptions": 405,
+					"rushes": 15442,
+					"rushYards": 68724,
+					"passYards": 133048
+				},
+				"metrics": {
+					"pointsPerTeamGame": 23.00877192982456,
+					"offensivePlaysPerTeamGame": 62.12982456140351,
+					"throwsPerTeamGame": 32.59649122807018,
+					"rushesPerTeamGame": 27.09122807017544,
+					"completionRate": 0.6531754574811626,
+					"sackRatePerPassPlay": 0.06969757660725015,
+					"interceptionRatePerThrow": 0.021797631862217438,
+					"rushYardsPerAttempt": 4.450459785001943,
+					"passYardsPerAttempt": 7.1608180839612485,
+					"passPlayShare": 0.563957756819337
+				},
+				"bootstrap95PercentIntervals": {
+					"pointsPerTeamGame": [22.29122807017544, 23.83684210526316],
+					"offensivePlaysPerTeamGame": [61.69824561403509, 62.59473684210526],
+					"throwsPerTeamGame": [32.03333333333333, 33.208771929824564],
+					"rushesPerTeamGame": [26.633333333333333, 27.46140350877193],
+					"completionRate": [0.6456241032998565, 0.6604884430876581],
+					"sackRatePerPassPlay": [0.06578485896086979, 0.0736726437240897],
+					"interceptionRatePerThrow": [
+						0.019725330081128374, 0.02400171058961886
+					],
+					"rushYardsPerAttempt": [4.356527415143603, 4.554214547088656],
+					"passYardsPerAttempt": [7.019655078018068, 7.30261491879989],
+					"passPlayShare": [0.5572944672421112, 0.5717955957086391]
+				}
+			},
+			{
+				"season": 2025,
+				"kneels": 452,
+				"spikes": 80,
+				"gameBlocks": 285,
+				"totals": {
+					"teamGames": 570,
+					"points": 13098,
+					"throws": 18367,
+					"completions": 11749,
+					"sacks": 1352,
+					"interceptions": 406,
+					"rushes": 15315,
+					"rushYards": 66506,
+					"passYards": 128601
+				},
+				"metrics": {
+					"pointsPerTeamGame": 22.978947368421053,
+					"offensivePlaysPerTeamGame": 61.463157894736845,
+					"throwsPerTeamGame": 32.22280701754386,
+					"rushesPerTeamGame": 26.86842105263158,
+					"completionRate": 0.6396798606195895,
+					"sackRatePerPassPlay": 0.06856331456970434,
+					"interceptionRatePerThrow": 0.022104861980726302,
+					"rushYardsPerAttempt": 4.342539993470454,
+					"passYardsPerAttempt": 7.001742255131486,
+					"passPlayShare": 0.5628532282925158
+				},
+				"bootstrap95PercentIntervals": {
+					"pointsPerTeamGame": [22.152631578947368, 23.87543859649123],
+					"offensivePlaysPerTeamGame": [60.93333333333333, 62.012280701754385],
+					"throwsPerTeamGame": [31.596491228070175, 32.910526315789475],
+					"rushesPerTeamGame": [26.477192982456142, 27.25964912280702],
+					"completionRate": [0.6310389751384214, 0.64750303163929],
+					"sackRatePerPassPlay": [0.0643962533088984, 0.07281603288797533],
+					"interceptionRatePerThrow": [
+						0.020326999558108707, 0.024159606449849685
+					],
+					"rushYardsPerAttempt": [4.247079904433236, 4.445214435146443],
+					"passYardsPerAttempt": [6.865162503357507, 7.137625645205107],
+					"passPlayShare": [0.5556378132118451, 0.570416172567621]
+				}
+			}
+		],
+		"pooled": {
+			"gameBlocks": 855,
+			"totals": {
+				"teamGames": 1710,
+				"points": 38696,
+				"throws": 56201,
+				"completions": 36312,
+				"sacks": 4203,
+				"interceptions": 1254,
+				"rushes": 46041,
+				"rushYards": 199523,
+				"passYards": 397074
+			},
+			"metrics": {
+				"pointsPerTeamGame": 22.62923976608187,
+				"offensivePlaysPerTeamGame": 62.248538011695906,
+				"throwsPerTeamGame": 32.86608187134503,
+				"rushesPerTeamGame": 26.924561403508772,
+				"completionRate": 0.6461094998309639,
+				"sackRatePerPassPlay": 0.0695814846698894,
+				"interceptionRatePerThrow": 0.022312770235405063,
+				"rushYardsPerAttempt": 4.333593970591429,
+				"passYardsPerAttempt": 7.065247949324745,
+				"passPlayShare": 0.5674667668749119
+			},
+			"bootstrap95PercentIntervals": {
+				"pointsPerTeamGame": [22.17543859649123, 23.10292397660819],
+				"offensivePlaysPerTeamGame": [61.990058479532166, 62.523976608187134],
+				"throwsPerTeamGame": [32.53625730994152, 33.2187134502924],
+				"rushesPerTeamGame": [26.6766081871345, 27.15204678362573],
+				"completionRate": [0.6413873038516406, 0.6504102664507058],
+				"sackRatePerPassPlay": [0.06722134178552562, 0.0719082260772244],
+				"interceptionRatePerThrow": [
+					0.021131247345320684, 0.023493088702379473
+				],
+				"rushYardsPerAttempt": [4.274855459801461, 4.3928447678447675],
+				"passYardsPerAttempt": [6.980641474391028, 7.152746920711658],
+				"passPlayShare": [0.5634809166061817, 0.5714900423748632]
+			}
+		},
+		"countedPenaltyPlays": 1568,
+		"referenceEligiblePlays": 103312
+	},
+	"simulated": {
+		"automatic": {
+			"gameBlocks": 64,
+			"totals": {
+				"teamGames": 128,
+				"points": 3147,
+				"throws": 4189,
+				"completions": 2590,
+				"sacks": 321,
+				"interceptions": 100,
+				"rushes": 3397,
+				"rushYards": 16517,
+				"passYards": 29684
+			},
+			"metrics": {
+				"pointsPerTeamGame": 24.5859375,
+				"offensivePlaysPerTeamGame": 61.7734375,
+				"throwsPerTeamGame": 32.7265625,
+				"rushesPerTeamGame": 26.5390625,
+				"completionRate": 0.6182859871090952,
+				"sackRatePerPassPlay": 0.07117516629711752,
+				"interceptionRatePerThrow": 0.023872045834328,
+				"rushYardsPerAttempt": 4.862231380629968,
+				"passYardsPerAttempt": 7.086178085461924,
+				"passPlayShare": 0.5703806753509548
+			},
+			"bootstrap95PercentIntervals": {
+				"pointsPerTeamGame": [22.7734375, 26.3828125],
+				"offensivePlaysPerTeamGame": [60.515625, 63.171875],
+				"throwsPerTeamGame": [31.4140625, 33.90625],
+				"rushesPerTeamGame": [25.46875, 27.640625],
+				"completionRate": [0.5957045079065376, 0.6392725598526704],
+				"sackRatePerPassPlay": [0.0640545894783183, 0.0794044665012407],
+				"interceptionRatePerThrow": [
+					0.019202363367799114, 0.028392685274302214
+				],
+				"rushYardsPerAttempt": [4.646177847113885, 5.067575757575757],
+				"passYardsPerAttempt": [6.745614035087719, 7.4096241321522625],
+				"passPlayShare": [0.5546625845133308, 0.585158921109282]
+			}
+		},
+		"tacticalBothTeams": {
+			"gameBlocks": 64,
+			"totals": {
+				"teamGames": 128,
+				"points": 2914,
+				"throws": 4132,
+				"completions": 2609,
+				"sacks": 266,
+				"interceptions": 128,
+				"rushes": 3481,
+				"rushYards": 15810,
+				"passYards": 29437
+			},
+			"metrics": {
+				"pointsPerTeamGame": 22.765625,
+				"offensivePlaysPerTeamGame": 61.5546875,
+				"throwsPerTeamGame": 32.28125,
+				"rushesPerTeamGame": 27.1953125,
+				"completionRate": 0.6314133591481123,
+				"sackRatePerPassPlay": 0.060482037289677125,
+				"interceptionRatePerThrow": 0.030977734753146177,
+				"rushYardsPerAttempt": 4.541798333812123,
+				"passYardsPerAttempt": 7.1241529525653435,
+				"passPlayShare": 0.5581926640436604
+			},
+			"bootstrap95PercentIntervals": {
+				"pointsPerTeamGame": [20.890625, 24.5703125],
+				"offensivePlaysPerTeamGame": [60.4296875, 62.828125],
+				"throwsPerTeamGame": [31.0234375, 33.59375],
+				"rushesPerTeamGame": [26.2421875, 28.140625],
+				"completionRate": [0.6117729502452698, 0.6504806507271382],
+				"sackRatePerPassPlay": [0.05290644868301544, 0.0671061926065458],
+				"interceptionRatePerThrow": [0.026585365853658536, 0.03544910179640719],
+				"rushYardsPerAttempt": [4.346109175377468, 4.743755509844255],
+				"passYardsPerAttempt": [6.806567593480345, 7.44272523084602],
+				"passPlayShare": [0.542721315688038, 0.5732812893477713]
+			}
+		},
+		"tacticalControlledTeam": {
+			"gameBlocks": 64,
+			"totals": {
+				"teamGames": 64,
+				"points": 1570,
+				"throws": 2145,
+				"completions": 1457,
+				"sacks": 120,
+				"interceptions": 60,
+				"rushes": 1792,
+				"rushYards": 7738,
+				"passYards": 16234
+			},
+			"metrics": {
+				"pointsPerTeamGame": 24.53125,
+				"offensivePlaysPerTeamGame": 63.390625,
+				"throwsPerTeamGame": 33.515625,
+				"rushesPerTeamGame": 28,
+				"completionRate": 0.6792540792540792,
+				"sackRatePerPassPlay": 0.052980132450331126,
+				"interceptionRatePerThrow": 0.027972027972027972,
+				"rushYardsPerAttempt": 4.318080357142857,
+				"passYardsPerAttempt": 7.568298368298368,
+				"passPlayShare": 0.55829430613754
+			},
+			"bootstrap95PercentIntervals": {
+				"pointsPerTeamGame": [21.53125, 27.421875],
+				"offensivePlaysPerTeamGame": [61.453125, 65.234375],
+				"throwsPerTeamGame": [31.671875, 35.21875],
+				"rushesPerTeamGame": [26.609375, 29.390625],
+				"completionRate": [0.6459684893419834, 0.7113594040968343],
+				"sackRatePerPassPlay": [0.04278782531980591, 0.06293706293706294],
+				"interceptionRatePerThrow": [0.020600089565606806, 0.03590425531914894],
+				"rushYardsPerAttempt": [4.082191780821918, 4.582349634626195],
+				"passYardsPerAttempt": [7.112669471715755, 8.023943661971831],
+				"passPlayShare": [0.538102261553589, 0.5781791192478971]
+			}
+		},
+		"tacticalOpponent": {
+			"gameBlocks": 64,
+			"totals": {
+				"teamGames": 64,
+				"points": 1344,
+				"throws": 1987,
+				"completions": 1152,
+				"sacks": 146,
+				"interceptions": 68,
+				"rushes": 1689,
+				"rushYards": 8072,
+				"passYards": 13203
+			},
+			"metrics": {
+				"pointsPerTeamGame": 21,
+				"offensivePlaysPerTeamGame": 59.71875,
+				"throwsPerTeamGame": 31.046875,
+				"rushesPerTeamGame": 26.390625,
+				"completionRate": 0.579768495218923,
+				"sackRatePerPassPlay": 0.06844819503047352,
+				"interceptionRatePerThrow": 0.034222445898339206,
+				"rushYardsPerAttempt": 4.779159265837774,
+				"passYardsPerAttempt": 6.644690488173126,
+				"passPlayShare": 0.5580847723704867
+			},
+			"bootstrap95PercentIntervals": {
+				"pointsPerTeamGame": [18.3125, 23.96875],
+				"offensivePlaysPerTeamGame": [57.46875, 61.921875],
+				"throwsPerTeamGame": [29.375, 32.84375],
+				"rushesPerTeamGame": [24.53125, 28.234375],
+				"completionRate": [0.5507394186639469, 0.6112255406797117],
+				"sackRatePerPassPlay": [0.05796439981743496, 0.07880434782608696],
+				"interceptionRatePerThrow": [
+					0.028197381671701913, 0.040575243965074476
+				],
+				"rushYardsPerAttempt": [4.497752087347463, 5.053056516724337],
+				"passYardsPerAttempt": [6.1611216730038025, 7.109422492401216],
+				"passPlayShare": [0.5336638830897703, 0.5822152065245988]
+			}
+		}
+	},
+	"games": [
+		{
+			"seed": 503000,
+			"teamIds": [0, 31],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 34,
+					"completions": 23,
+					"sacks": 7,
+					"interceptions": 0,
+					"rushes": 18,
+					"rushYards": 72,
+					"passYards": 277
+				},
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 30,
+					"completions": 24,
+					"sacks": 5,
+					"interceptions": 0,
+					"rushes": 27,
+					"rushYards": 136,
+					"passYards": 281
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 40,
+					"throws": 37,
+					"completions": 28,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 27,
+					"rushYards": 244,
+					"passYards": 386
+				},
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 34,
+					"completions": 19,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 19,
+					"rushYards": 128,
+					"passYards": 274
+				}
+			]
+		},
+		{
+			"seed": 503001,
+			"teamIds": [31, 0],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 32,
+					"throws": 26,
+					"completions": 22,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 22,
+					"rushYards": 105,
+					"passYards": 282
+				},
+				{
+					"teamGames": 1,
+					"points": 30,
+					"throws": 37,
+					"completions": 25,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 30,
+					"rushYards": 176,
+					"passYards": 248
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 29,
+					"throws": 32,
+					"completions": 28,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 119,
+					"passYards": 295
+				},
+				{
+					"teamGames": 1,
+					"points": 14,
+					"throws": 27,
+					"completions": 18,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 21,
+					"rushYards": 75,
+					"passYards": 189
+				}
+			]
+		},
+		{
+			"seed": 503002,
+			"teamIds": [1, 30],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 45,
+					"completions": 21,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 17,
+					"rushYards": 46,
+					"passYards": 219
+				},
+				{
+					"teamGames": 1,
+					"points": 29,
+					"throws": 31,
+					"completions": 17,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 37,
+					"rushYards": 183,
+					"passYards": 226
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 6,
+					"throws": 35,
+					"completions": 21,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 92,
+					"passYards": 197
+				},
+				{
+					"teamGames": 1,
+					"points": 18,
+					"throws": 37,
+					"completions": 24,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 21,
+					"rushYards": 78,
+					"passYards": 230
+				}
+			]
+		},
+		{
+			"seed": 503003,
+			"teamIds": [30, 1],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 34,
+					"completions": 22,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 32,
+					"rushYards": 148,
+					"passYards": 259
+				},
+				{
+					"teamGames": 1,
+					"points": 7,
+					"throws": 22,
+					"completions": 11,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 21,
+					"rushYards": 67,
+					"passYards": 174
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 23,
+					"completions": 20,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 20,
+					"rushYards": 79,
+					"passYards": 241
+				},
+				{
+					"teamGames": 1,
+					"points": 25,
+					"throws": 34,
+					"completions": 19,
+					"sacks": 6,
+					"interceptions": 0,
+					"rushes": 38,
+					"rushYards": 185,
+					"passYards": 200
+				}
+			]
+		},
+		{
+			"seed": 503004,
+			"teamIds": [2, 29],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 55,
+					"throws": 36,
+					"completions": 30,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 31,
+					"rushYards": 193,
+					"passYards": 328
+				},
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 37,
+					"completions": 20,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 25,
+					"rushYards": 113,
+					"passYards": 240
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 29,
+					"completions": 25,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 29,
+					"rushYards": 125,
+					"passYards": 266
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 26,
+					"completions": 15,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 30,
+					"rushYards": 123,
+					"passYards": 197
+				}
+			]
+		},
+		{
+			"seed": 503005,
+			"teamIds": [29, 2],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 0,
+					"throws": 26,
+					"completions": 15,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 15,
+					"rushYards": 51,
+					"passYards": 127
+				},
+				{
+					"teamGames": 1,
+					"points": 44,
+					"throws": 33,
+					"completions": 28,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 32,
+					"rushYards": 182,
+					"passYards": 328
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 0,
+					"throws": 20,
+					"completions": 15,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 27,
+					"rushYards": 65,
+					"passYards": 112
+				},
+				{
+					"teamGames": 1,
+					"points": 3,
+					"throws": 31,
+					"completions": 21,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 21,
+					"rushYards": 60,
+					"passYards": 175
+				}
+			]
+		},
+		{
+			"seed": 503006,
+			"teamIds": [3, 28],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 7,
+					"throws": 25,
+					"completions": 10,
+					"sacks": 5,
+					"interceptions": 1,
+					"rushes": 28,
+					"rushYards": 124,
+					"passYards": 102
+				},
+				{
+					"teamGames": 1,
+					"points": 48,
+					"throws": 32,
+					"completions": 30,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 21,
+					"rushYards": 39,
+					"passYards": 424
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 29,
+					"completions": 14,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 31,
+					"rushYards": 144,
+					"passYards": 152
+				},
+				{
+					"teamGames": 1,
+					"points": 24,
+					"throws": 36,
+					"completions": 25,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 114,
+					"passYards": 210
+				}
+			]
+		},
+		{
+			"seed": 503007,
+			"teamIds": [28, 3],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 43,
+					"throws": 35,
+					"completions": 30,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 95,
+					"passYards": 404
+				},
+				{
+					"teamGames": 1,
+					"points": 36,
+					"throws": 37,
+					"completions": 21,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 47,
+					"rushYards": 259,
+					"passYards": 222
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 35,
+					"throws": 30,
+					"completions": 27,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 29,
+					"rushYards": 103,
+					"passYards": 301
+				},
+				{
+					"teamGames": 1,
+					"points": 3,
+					"throws": 20,
+					"completions": 7,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 28,
+					"rushYards": 126,
+					"passYards": 41
+				}
+			]
+		},
+		{
+			"seed": 503008,
+			"teamIds": [4, 27],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 6,
+					"throws": 29,
+					"completions": 16,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 28,
+					"rushYards": 99,
+					"passYards": 157
+				},
+				{
+					"teamGames": 1,
+					"points": 12,
+					"throws": 25,
+					"completions": 16,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 40,
+					"rushYards": 197,
+					"passYards": 115
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 26,
+					"completions": 15,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 111,
+					"passYards": 214
+				},
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 25,
+					"completions": 18,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 39,
+					"rushYards": 211,
+					"passYards": 212
+				}
+			]
+		},
+		{
+			"seed": 503009,
+			"teamIds": [27, 4],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 39,
+					"throws": 32,
+					"completions": 18,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 38,
+					"rushYards": 222,
+					"passYards": 204
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 17,
+					"completions": 8,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 21,
+					"rushYards": 48,
+					"passYards": 116
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 14,
+					"throws": 26,
+					"completions": 18,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 33,
+					"rushYards": 89,
+					"passYards": 142
+				},
+				{
+					"teamGames": 1,
+					"points": 12,
+					"throws": 18,
+					"completions": 9,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 35,
+					"rushYards": 146,
+					"passYards": 97
+				}
+			]
+		},
+		{
+			"seed": 503010,
+			"teamIds": [5, 26],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 41,
+					"throws": 47,
+					"completions": 36,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 24,
+					"rushYards": 100,
+					"passYards": 355
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 36,
+					"completions": 20,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 14,
+					"rushYards": 83,
+					"passYards": 271
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 30,
+					"throws": 35,
+					"completions": 34,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 32,
+					"rushYards": 125,
+					"passYards": 343
+				},
+				{
+					"teamGames": 1,
+					"points": 13,
+					"throws": 38,
+					"completions": 19,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 15,
+					"rushYards": 51,
+					"passYards": 259
+				}
+			]
+		},
+		{
+			"seed": 503011,
+			"teamIds": [26, 5],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 37,
+					"completions": 15,
+					"sacks": 1,
+					"interceptions": 2,
+					"rushes": 24,
+					"rushYards": 145,
+					"passYards": 132
+				},
+				{
+					"teamGames": 1,
+					"points": 58,
+					"throws": 48,
+					"completions": 38,
+					"sacks": 1,
+					"interceptions": 2,
+					"rushes": 25,
+					"rushYards": 127,
+					"passYards": 499
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 15,
+					"throws": 39,
+					"completions": 29,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 10,
+					"rushYards": 33,
+					"passYards": 339
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 34,
+					"completions": 29,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 34,
+					"rushYards": 108,
+					"passYards": 310
+				}
+			]
+		},
+		{
+			"seed": 503012,
+			"teamIds": [6, 25],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 22,
+					"throws": 32,
+					"completions": 19,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 31,
+					"rushYards": 145,
+					"passYards": 230
+				},
+				{
+					"teamGames": 1,
+					"points": 32,
+					"throws": 39,
+					"completions": 30,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 21,
+					"rushYards": 102,
+					"passYards": 356
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 22,
+					"throws": 23,
+					"completions": 10,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 34,
+					"rushYards": 159,
+					"passYards": 155
+				},
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 31,
+					"completions": 17,
+					"sacks": 7,
+					"interceptions": 2,
+					"rushes": 22,
+					"rushYards": 77,
+					"passYards": 229
+				}
+			]
+		},
+		{
+			"seed": 503013,
+			"teamIds": [25, 6],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 24,
+					"throws": 28,
+					"completions": 14,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 27,
+					"rushYards": 251,
+					"passYards": 178
+				},
+				{
+					"teamGames": 1,
+					"points": 12,
+					"throws": 32,
+					"completions": 13,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 31,
+					"rushYards": 159,
+					"passYards": 118
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 36,
+					"completions": 24,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 25,
+					"rushYards": 93,
+					"passYards": 232
+				},
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 20,
+					"completions": 13,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 34,
+					"rushYards": 234,
+					"passYards": 133
+				}
+			]
+		},
+		{
+			"seed": 503014,
+			"teamIds": [7, 24],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 27,
+					"completions": 13,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 47,
+					"rushYards": 255,
+					"passYards": 136
+				},
+				{
+					"teamGames": 1,
+					"points": 26,
+					"throws": 29,
+					"completions": 13,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 36,
+					"rushYards": 176,
+					"passYards": 186
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 48,
+					"throws": 33,
+					"completions": 24,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 31,
+					"rushYards": 170,
+					"passYards": 321
+				},
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 17,
+					"completions": 9,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 28,
+					"rushYards": 180,
+					"passYards": 135
+				}
+			]
+		},
+		{
+			"seed": 503015,
+			"teamIds": [24, 7],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 30,
+					"completions": 20,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 99,
+					"passYards": 235
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 28,
+					"completions": 23,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 74,
+					"passYards": 257
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 26,
+					"completions": 17,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 28,
+					"rushYards": 169,
+					"passYards": 178
+				},
+				{
+					"teamGames": 1,
+					"points": 14,
+					"throws": 24,
+					"completions": 13,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 29,
+					"rushYards": 127,
+					"passYards": 115
+				}
+			]
+		},
+		{
+			"seed": 503016,
+			"teamIds": [8, 23],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 40,
+					"completions": 22,
+					"sacks": 6,
+					"interceptions": 0,
+					"rushes": 14,
+					"rushYards": 69,
+					"passYards": 259
+				},
+				{
+					"teamGames": 1,
+					"points": 43,
+					"throws": 27,
+					"completions": 18,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 42,
+					"rushYards": 227,
+					"passYards": 211
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 48,
+					"completions": 36,
+					"sacks": 1,
+					"interceptions": 2,
+					"rushes": 31,
+					"rushYards": 84,
+					"passYards": 425
+				},
+				{
+					"teamGames": 1,
+					"points": 13,
+					"throws": 35,
+					"completions": 17,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 15,
+					"rushYards": 108,
+					"passYards": 112
+				}
+			]
+		},
+		{
+			"seed": 503017,
+			"teamIds": [23, 8],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 39,
+					"completions": 19,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 30,
+					"rushYards": 176,
+					"passYards": 131
+				},
+				{
+					"teamGames": 1,
+					"points": 11,
+					"throws": 30,
+					"completions": 12,
+					"sacks": 2,
+					"interceptions": 4,
+					"rushes": 28,
+					"rushYards": 116,
+					"passYards": 174
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 31,
+					"completions": 15,
+					"sacks": 4,
+					"interceptions": 2,
+					"rushes": 26,
+					"rushYards": 90,
+					"passYards": 179
+				},
+				{
+					"teamGames": 1,
+					"points": 58,
+					"throws": 30,
+					"completions": 21,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 39,
+					"rushYards": 277,
+					"passYards": 295
+				}
+			]
+		},
+		{
+			"seed": 503018,
+			"teamIds": [9, 22],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 41,
+					"throws": 33,
+					"completions": 17,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 45,
+					"rushYards": 213,
+					"passYards": 177
+				},
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 43,
+					"completions": 19,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 23,
+					"rushYards": 130,
+					"passYards": 348
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 38,
+					"completions": 27,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 33,
+					"rushYards": 136,
+					"passYards": 250
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 33,
+					"completions": 12,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 11,
+					"rushYards": 42,
+					"passYards": 132
+				}
+			]
+		},
+		{
+			"seed": 503019,
+			"teamIds": [22, 9],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 36,
+					"throws": 39,
+					"completions": 22,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 20,
+					"rushYards": 175,
+					"passYards": 239
+				},
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 28,
+					"completions": 19,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 28,
+					"rushYards": 148,
+					"passYards": 276
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 30,
+					"throws": 44,
+					"completions": 25,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 28,
+					"rushYards": 123,
+					"passYards": 249
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 29,
+					"completions": 12,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 26,
+					"rushYards": 110,
+					"passYards": 150
+				}
+			]
+		},
+		{
+			"seed": 503020,
+			"teamIds": [10, 21],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 24,
+					"throws": 33,
+					"completions": 24,
+					"sacks": 5,
+					"interceptions": 0,
+					"rushes": 21,
+					"rushYards": 82,
+					"passYards": 225
+				},
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 34,
+					"completions": 22,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 26,
+					"rushYards": 119,
+					"passYards": 192
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 49,
+					"throws": 38,
+					"completions": 33,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 31,
+					"rushYards": 164,
+					"passYards": 369
+				},
+				{
+					"teamGames": 1,
+					"points": 24,
+					"throws": 32,
+					"completions": 17,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 25,
+					"rushYards": 156,
+					"passYards": 167
+				}
+			]
+		},
+		{
+			"seed": 503021,
+			"teamIds": [21, 10],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 43,
+					"completions": 28,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 40,
+					"rushYards": 179,
+					"passYards": 261
+				},
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 49,
+					"completions": 32,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 26,
+					"rushYards": 133,
+					"passYards": 360
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 35,
+					"throws": 46,
+					"completions": 34,
+					"sacks": 1,
+					"interceptions": 3,
+					"rushes": 16,
+					"rushYards": 91,
+					"passYards": 377
+				},
+				{
+					"teamGames": 1,
+					"points": 9,
+					"throws": 44,
+					"completions": 20,
+					"sacks": 5,
+					"interceptions": 0,
+					"rushes": 18,
+					"rushYards": 81,
+					"passYards": 204
+				}
+			]
+		},
+		{
+			"seed": 503022,
+			"teamIds": [11, 20],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 23,
+					"completions": 12,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 21,
+					"rushYards": 78,
+					"passYards": 141
+				},
+				{
+					"teamGames": 1,
+					"points": 12,
+					"throws": 25,
+					"completions": 13,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 41,
+					"rushYards": 133,
+					"passYards": 128
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 18,
+					"throws": 29,
+					"completions": 15,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 29,
+					"rushYards": 140,
+					"passYards": 182
+				},
+				{
+					"teamGames": 1,
+					"points": 24,
+					"throws": 18,
+					"completions": 10,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 33,
+					"rushYards": 228,
+					"passYards": 108
+				}
+			]
+		},
+		{
+			"seed": 503023,
+			"teamIds": [20, 11],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 30,
+					"completions": 14,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 34,
+					"rushYards": 243,
+					"passYards": 154
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 39,
+					"completions": 18,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 23,
+					"rushYards": 117,
+					"passYards": 214
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 28,
+					"completions": 20,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 33,
+					"rushYards": 152,
+					"passYards": 184
+				},
+				{
+					"teamGames": 1,
+					"points": 3,
+					"throws": 32,
+					"completions": 15,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 20,
+					"rushYards": 119,
+					"passYards": 77
+				}
+			]
+		},
+		{
+			"seed": 503024,
+			"teamIds": [12, 19],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 29,
+					"throws": 31,
+					"completions": 22,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 28,
+					"rushYards": 147,
+					"passYards": 235
+				},
+				{
+					"teamGames": 1,
+					"points": 14,
+					"throws": 30,
+					"completions": 21,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 20,
+					"rushYards": 111,
+					"passYards": 166
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 25,
+					"completions": 21,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 39,
+					"rushYards": 192,
+					"passYards": 278
+				},
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 29,
+					"completions": 18,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 20,
+					"rushYards": 78,
+					"passYards": 237
+				}
+			]
+		},
+		{
+			"seed": 503025,
+			"teamIds": [19, 12],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 42,
+					"throws": 24,
+					"completions": 15,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 17,
+					"rushYards": 97,
+					"passYards": 312
+				},
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 48,
+					"completions": 36,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 23,
+					"rushYards": 93,
+					"passYards": 381
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 26,
+					"throws": 40,
+					"completions": 28,
+					"sacks": 0,
+					"interceptions": 3,
+					"rushes": 28,
+					"rushYards": 94,
+					"passYards": 362
+				},
+				{
+					"teamGames": 1,
+					"points": 22,
+					"throws": 30,
+					"completions": 18,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 32,
+					"rushYards": 146,
+					"passYards": 322
+				}
+			]
+		},
+		{
+			"seed": 503026,
+			"teamIds": [13, 18],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 12,
+					"throws": 29,
+					"completions": 18,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 14,
+					"rushYards": 80,
+					"passYards": 240
+				},
+				{
+					"teamGames": 1,
+					"points": 30,
+					"throws": 39,
+					"completions": 26,
+					"sacks": 5,
+					"interceptions": 0,
+					"rushes": 33,
+					"rushYards": 130,
+					"passYards": 249
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 39,
+					"completions": 24,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 39,
+					"rushYards": 189,
+					"passYards": 291
+				},
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 45,
+					"completions": 23,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 30,
+					"rushYards": 206,
+					"passYards": 276
+				}
+			]
+		},
+		{
+			"seed": 503027,
+			"teamIds": [18, 13],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 7,
+					"throws": 22,
+					"completions": 12,
+					"sacks": 5,
+					"interceptions": 2,
+					"rushes": 15,
+					"rushYards": 48,
+					"passYards": 70
+				},
+				{
+					"teamGames": 1,
+					"points": 43,
+					"throws": 50,
+					"completions": 35,
+					"sacks": 2,
+					"interceptions": 3,
+					"rushes": 22,
+					"rushYards": 88,
+					"passYards": 389
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 39,
+					"completions": 33,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 28,
+					"rushYards": 151,
+					"passYards": 302
+				},
+				{
+					"teamGames": 1,
+					"points": 3,
+					"throws": 29,
+					"completions": 14,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 18,
+					"rushYards": 81,
+					"passYards": 109
+				}
+			]
+		},
+		{
+			"seed": 503028,
+			"teamIds": [14, 17],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 29,
+					"completions": 13,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 13,
+					"rushYards": 56,
+					"passYards": 141
+				},
+				{
+					"teamGames": 1,
+					"points": 55,
+					"throws": 36,
+					"completions": 29,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 44,
+					"rushYards": 197,
+					"passYards": 313
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 11,
+					"throws": 23,
+					"completions": 9,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 29,
+					"rushYards": 122,
+					"passYards": 106
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 20,
+					"completions": 14,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 42,
+					"rushYards": 174,
+					"passYards": 140
+				}
+			]
+		},
+		{
+			"seed": 503029,
+			"teamIds": [17, 14],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 15,
+					"completions": 10,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 27,
+					"rushYards": 74,
+					"passYards": 111
+				},
+				{
+					"teamGames": 1,
+					"points": 15,
+					"throws": 44,
+					"completions": 24,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 102,
+					"passYards": 202
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 32,
+					"throws": 26,
+					"completions": 22,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 32,
+					"rushYards": 133,
+					"passYards": 262
+				},
+				{
+					"teamGames": 1,
+					"points": 29,
+					"throws": 33,
+					"completions": 20,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 98,
+					"passYards": 241
+				}
+			]
+		},
+		{
+			"seed": 503030,
+			"teamIds": [15, 16],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 41,
+					"throws": 31,
+					"completions": 24,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 39,
+					"rushYards": 179,
+					"passYards": 359
+				},
+				{
+					"teamGames": 1,
+					"points": 14,
+					"throws": 20,
+					"completions": 11,
+					"sacks": 4,
+					"interceptions": 3,
+					"rushes": 20,
+					"rushYards": 102,
+					"passYards": 110
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 32,
+					"throws": 39,
+					"completions": 27,
+					"sacks": 4,
+					"interceptions": 3,
+					"rushes": 29,
+					"rushYards": 112,
+					"passYards": 392
+				},
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 38,
+					"completions": 23,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 11,
+					"rushYards": 46,
+					"passYards": 274
+				}
+			]
+		},
+		{
+			"seed": 503031,
+			"teamIds": [16, 15],
+			"controlled": 0,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 24,
+					"throws": 38,
+					"completions": 21,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 21,
+					"rushYards": 84,
+					"passYards": 189
+				},
+				{
+					"teamGames": 1,
+					"points": 26,
+					"throws": 31,
+					"completions": 22,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 32,
+					"rushYards": 155,
+					"passYards": 276
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 52,
+					"throws": 40,
+					"completions": 31,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 29,
+					"rushYards": 148,
+					"passYards": 437
+				},
+				{
+					"teamGames": 1,
+					"points": 42,
+					"throws": 32,
+					"completions": 20,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 126,
+					"passYards": 329
+				}
+			]
+		},
+		{
+			"seed": 503032,
+			"teamIds": [0, 30],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 32,
+					"completions": 22,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 19,
+					"rushYards": 52,
+					"passYards": 308
+				},
+				{
+					"teamGames": 1,
+					"points": 29,
+					"throws": 36,
+					"completions": 28,
+					"sacks": 6,
+					"interceptions": 1,
+					"rushes": 25,
+					"rushYards": 91,
+					"passYards": 333
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 23,
+					"completions": 7,
+					"sacks": 4,
+					"interceptions": 2,
+					"rushes": 16,
+					"rushYards": 46,
+					"passYards": 124
+				},
+				{
+					"teamGames": 1,
+					"points": 38,
+					"throws": 49,
+					"completions": 38,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 24,
+					"rushYards": 91,
+					"passYards": 416
+				}
+			]
+		},
+		{
+			"seed": 503033,
+			"teamIds": [30, 0],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 36,
+					"completions": 21,
+					"sacks": 5,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 129,
+					"passYards": 221
+				},
+				{
+					"teamGames": 1,
+					"points": 3,
+					"throws": 29,
+					"completions": 15,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 16,
+					"rushYards": 82,
+					"passYards": 128
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 40,
+					"completions": 27,
+					"sacks": 5,
+					"interceptions": 1,
+					"rushes": 21,
+					"rushYards": 106,
+					"passYards": 279
+				},
+				{
+					"teamGames": 1,
+					"points": 42,
+					"throws": 40,
+					"completions": 29,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 26,
+					"rushYards": 117,
+					"passYards": 320
+				}
+			]
+		},
+		{
+			"seed": 503034,
+			"teamIds": [31, 29],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 49,
+					"throws": 43,
+					"completions": 35,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 25,
+					"rushYards": 71,
+					"passYards": 399
+				},
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 29,
+					"completions": 12,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 33,
+					"rushYards": 216,
+					"passYards": 135
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 51,
+					"throws": 37,
+					"completions": 33,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 31,
+					"rushYards": 129,
+					"passYards": 367
+				},
+				{
+					"teamGames": 1,
+					"points": 6,
+					"throws": 33,
+					"completions": 15,
+					"sacks": 1,
+					"interceptions": 3,
+					"rushes": 21,
+					"rushYards": 60,
+					"passYards": 185
+				}
+			]
+		},
+		{
+			"seed": 503035,
+			"teamIds": [29, 31],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 31,
+					"completions": 19,
+					"sacks": 4,
+					"interceptions": 2,
+					"rushes": 19,
+					"rushYards": 122,
+					"passYards": 185
+				},
+				{
+					"teamGames": 1,
+					"points": 40,
+					"throws": 41,
+					"completions": 33,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 25,
+					"rushYards": 108,
+					"passYards": 381
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 14,
+					"throws": 17,
+					"completions": 7,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 22,
+					"rushYards": 85,
+					"passYards": 73
+				},
+				{
+					"teamGames": 1,
+					"points": 22,
+					"throws": 35,
+					"completions": 28,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 33,
+					"rushYards": 134,
+					"passYards": 290
+				}
+			]
+		},
+		{
+			"seed": 503036,
+			"teamIds": [1, 28],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 7,
+					"throws": 25,
+					"completions": 10,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 20,
+					"rushYards": 69,
+					"passYards": 123
+				},
+				{
+					"teamGames": 1,
+					"points": 44,
+					"throws": 45,
+					"completions": 35,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 25,
+					"rushYards": 205,
+					"passYards": 446
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 38,
+					"completions": 21,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 94,
+					"passYards": 283
+				},
+				{
+					"teamGames": 1,
+					"points": 23,
+					"throws": 38,
+					"completions": 27,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 32,
+					"rushYards": 134,
+					"passYards": 275
+				}
+			]
+		},
+		{
+			"seed": 503037,
+			"teamIds": [28, 1],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 46,
+					"throws": 32,
+					"completions": 28,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 19,
+					"rushYards": 105,
+					"passYards": 340
+				},
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 24,
+					"completions": 13,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 20,
+					"rushYards": 59,
+					"passYards": 148
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 61,
+					"throws": 50,
+					"completions": 39,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 30,
+					"rushYards": 137,
+					"passYards": 432
+				},
+				{
+					"teamGames": 1,
+					"points": 6,
+					"throws": 36,
+					"completions": 13,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 22,
+					"rushYards": 74,
+					"passYards": 116
+				}
+			]
+		},
+		{
+			"seed": 503038,
+			"teamIds": [2, 27],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 26,
+					"completions": 18,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 25,
+					"rushYards": 191,
+					"passYards": 236
+				},
+				{
+					"teamGames": 1,
+					"points": 23,
+					"throws": 31,
+					"completions": 17,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 35,
+					"rushYards": 218,
+					"passYards": 233
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 35,
+					"throws": 33,
+					"completions": 23,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 32,
+					"rushYards": 122,
+					"passYards": 353
+				},
+				{
+					"teamGames": 1,
+					"points": 15,
+					"throws": 31,
+					"completions": 12,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 33,
+					"rushYards": 187,
+					"passYards": 110
+				}
+			]
+		},
+		{
+			"seed": 503039,
+			"teamIds": [27, 2],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 23,
+					"completions": 17,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 39,
+					"rushYards": 191,
+					"passYards": 193
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 32,
+					"completions": 22,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 21,
+					"rushYards": 83,
+					"passYards": 198
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 23,
+					"completions": 12,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 38,
+					"rushYards": 168,
+					"passYards": 114
+				},
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 36,
+					"completions": 29,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 16,
+					"rushYards": 52,
+					"passYards": 313
+				}
+			]
+		},
+		{
+			"seed": 503040,
+			"teamIds": [3, 26],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 23,
+					"throws": 32,
+					"completions": 13,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 27,
+					"rushYards": 124,
+					"passYards": 157
+				},
+				{
+					"teamGames": 1,
+					"points": 47,
+					"throws": 45,
+					"completions": 27,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 26,
+					"rushYards": 194,
+					"passYards": 349
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 12,
+					"throws": 24,
+					"completions": 12,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 31,
+					"rushYards": 135,
+					"passYards": 157
+				},
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 36,
+					"completions": 25,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 24,
+					"rushYards": 110,
+					"passYards": 303
+				}
+			]
+		},
+		{
+			"seed": 503041,
+			"teamIds": [26, 3],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 13,
+					"throws": 37,
+					"completions": 20,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 25,
+					"rushYards": 134,
+					"passYards": 292
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 26,
+					"completions": 15,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 33,
+					"rushYards": 130,
+					"passYards": 146
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 39,
+					"completions": 26,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 20,
+					"rushYards": 65,
+					"passYards": 310
+				},
+				{
+					"teamGames": 1,
+					"points": 0,
+					"throws": 21,
+					"completions": 9,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 34,
+					"rushYards": 146,
+					"passYards": 58
+				}
+			]
+		},
+		{
+			"seed": 503042,
+			"teamIds": [4, 25],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 38,
+					"throws": 27,
+					"completions": 18,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 32,
+					"rushYards": 170,
+					"passYards": 242
+				},
+				{
+					"teamGames": 1,
+					"points": 0,
+					"throws": 24,
+					"completions": 11,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 19,
+					"rushYards": 83,
+					"passYards": 97
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 27,
+					"completions": 14,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 38,
+					"rushYards": 192,
+					"passYards": 179
+				},
+				{
+					"teamGames": 1,
+					"points": 23,
+					"throws": 27,
+					"completions": 18,
+					"sacks": 5,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 147,
+					"passYards": 194
+				}
+			]
+		},
+		{
+			"seed": 503043,
+			"teamIds": [25, 4],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 49,
+					"completions": 33,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 18,
+					"rushYards": 54,
+					"passYards": 371
+				},
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 23,
+					"completions": 16,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 33,
+					"rushYards": 141,
+					"passYards": 185
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 34,
+					"completions": 20,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 27,
+					"rushYards": 97,
+					"passYards": 218
+				},
+				{
+					"teamGames": 1,
+					"points": 13,
+					"throws": 37,
+					"completions": 21,
+					"sacks": 5,
+					"interceptions": 1,
+					"rushes": 30,
+					"rushYards": 143,
+					"passYards": 226
+				}
+			]
+		},
+		{
+			"seed": 503044,
+			"teamIds": [5, 24],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 59,
+					"throws": 43,
+					"completions": 33,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 13,
+					"rushYards": 73,
+					"passYards": 522
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 32,
+					"completions": 14,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 36,
+					"rushYards": 207,
+					"passYards": 178
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 30,
+					"completions": 21,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 19,
+					"rushYards": 85,
+					"passYards": 208
+				},
+				{
+					"teamGames": 1,
+					"points": 18,
+					"throws": 21,
+					"completions": 13,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 28,
+					"rushYards": 88,
+					"passYards": 105
+				}
+			]
+		},
+		{
+			"seed": 503045,
+			"teamIds": [24, 5],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 47,
+					"throws": 29,
+					"completions": 21,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 34,
+					"rushYards": 231,
+					"passYards": 221
+				},
+				{
+					"teamGames": 1,
+					"points": 19,
+					"throws": 41,
+					"completions": 32,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 16,
+					"rushYards": 40,
+					"passYards": 354
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 23,
+					"completions": 15,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 24,
+					"rushYards": 93,
+					"passYards": 162
+				},
+				{
+					"teamGames": 1,
+					"points": 48,
+					"throws": 48,
+					"completions": 42,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 102,
+					"passYards": 433
+				}
+			]
+		},
+		{
+			"seed": 503046,
+			"teamIds": [6, 23],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 23,
+					"throws": 26,
+					"completions": 11,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 36,
+					"rushYards": 261,
+					"passYards": 125
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 33,
+					"completions": 16,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 29,
+					"rushYards": 192,
+					"passYards": 218
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 22,
+					"completions": 10,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 28,
+					"rushYards": 136,
+					"passYards": 204
+				},
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 38,
+					"completions": 23,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 29,
+					"rushYards": 99,
+					"passYards": 248
+				}
+			]
+		},
+		{
+			"seed": 503047,
+			"teamIds": [23, 6],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 42,
+					"completions": 25,
+					"sacks": 4,
+					"interceptions": 2,
+					"rushes": 33,
+					"rushYards": 121,
+					"passYards": 216
+				},
+				{
+					"teamGames": 1,
+					"points": 25,
+					"throws": 34,
+					"completions": 17,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 32,
+					"rushYards": 127,
+					"passYards": 209
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 47,
+					"throws": 44,
+					"completions": 32,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 30,
+					"rushYards": 145,
+					"passYards": 324
+				},
+				{
+					"teamGames": 1,
+					"points": 7,
+					"throws": 19,
+					"completions": 9,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 30,
+					"rushYards": 96,
+					"passYards": 81
+				}
+			]
+		},
+		{
+			"seed": 503048,
+			"teamIds": [7, 22],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 42,
+					"throws": 34,
+					"completions": 27,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 38,
+					"rushYards": 226,
+					"passYards": 310
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 33,
+					"completions": 16,
+					"sacks": 5,
+					"interceptions": 1,
+					"rushes": 11,
+					"rushYards": 55,
+					"passYards": 192
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 26,
+					"throws": 27,
+					"completions": 19,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 34,
+					"rushYards": 149,
+					"passYards": 201
+				},
+				{
+					"teamGames": 1,
+					"points": 18,
+					"throws": 31,
+					"completions": 19,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 14,
+					"rushYards": 50,
+					"passYards": 271
+				}
+			]
+		},
+		{
+			"seed": 503049,
+			"teamIds": [22, 7],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 37,
+					"completions": 18,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 123,
+					"passYards": 156
+				},
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 30,
+					"completions": 21,
+					"sacks": 5,
+					"interceptions": 1,
+					"rushes": 27,
+					"rushYards": 139,
+					"passYards": 224
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 37,
+					"completions": 23,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 30,
+					"rushYards": 170,
+					"passYards": 274
+				},
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 31,
+					"completions": 21,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 29,
+					"rushYards": 142,
+					"passYards": 265
+				}
+			]
+		},
+		{
+			"seed": 503050,
+			"teamIds": [8, 21],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 24,
+					"throws": 43,
+					"completions": 30,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 23,
+					"rushYards": 92,
+					"passYards": 308
+				},
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 21,
+					"completions": 16,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 20,
+					"rushYards": 69,
+					"passYards": 283
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 36,
+					"completions": 17,
+					"sacks": 1,
+					"interceptions": 2,
+					"rushes": 41,
+					"rushYards": 239,
+					"passYards": 169
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 29,
+					"completions": 12,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 24,
+					"rushYards": 116,
+					"passYards": 103
+				}
+			]
+		},
+		{
+			"seed": 503051,
+			"teamIds": [21, 8],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 36,
+					"completions": 21,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 19,
+					"rushYards": 94,
+					"passYards": 166
+				},
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 41,
+					"completions": 23,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 90,
+					"passYards": 207
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 25,
+					"throws": 28,
+					"completions": 20,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 26,
+					"rushYards": 120,
+					"passYards": 188
+				},
+				{
+					"teamGames": 1,
+					"points": 35,
+					"throws": 42,
+					"completions": 34,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 22,
+					"rushYards": 45,
+					"passYards": 470
+				}
+			]
+		},
+		{
+			"seed": 503052,
+			"teamIds": [9, 20],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 30,
+					"throws": 18,
+					"completions": 14,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 42,
+					"rushYards": 250,
+					"passYards": 193
+				},
+				{
+					"teamGames": 1,
+					"points": 3,
+					"throws": 24,
+					"completions": 10,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 28,
+					"rushYards": 139,
+					"passYards": 115
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 39,
+					"throws": 31,
+					"completions": 16,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 38,
+					"rushYards": 202,
+					"passYards": 228
+				},
+				{
+					"teamGames": 1,
+					"points": 27,
+					"throws": 39,
+					"completions": 22,
+					"sacks": 3,
+					"interceptions": 2,
+					"rushes": 28,
+					"rushYards": 112,
+					"passYards": 257
+				}
+			]
+		},
+		{
+			"seed": 503053,
+			"teamIds": [20, 9],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 6,
+					"throws": 14,
+					"completions": 6,
+					"sacks": 7,
+					"interceptions": 0,
+					"rushes": 25,
+					"rushYards": 117,
+					"passYards": 53
+				},
+				{
+					"teamGames": 1,
+					"points": 17,
+					"throws": 20,
+					"completions": 8,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 36,
+					"rushYards": 172,
+					"passYards": 184
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 31,
+					"completions": 12,
+					"sacks": 6,
+					"interceptions": 1,
+					"rushes": 32,
+					"rushYards": 176,
+					"passYards": 92
+				},
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 28,
+					"completions": 15,
+					"sacks": 1,
+					"interceptions": 4,
+					"rushes": 35,
+					"rushYards": 193,
+					"passYards": 168
+				}
+			]
+		},
+		{
+			"seed": 503054,
+			"teamIds": [10, 19],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 39,
+					"throws": 20,
+					"completions": 18,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 23,
+					"rushYards": 104,
+					"passYards": 317
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 39,
+					"completions": 29,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 110,
+					"passYards": 204
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 43,
+					"completions": 19,
+					"sacks": 1,
+					"interceptions": 3,
+					"rushes": 28,
+					"rushYards": 114,
+					"passYards": 197
+				},
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 30,
+					"completions": 22,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 35,
+					"rushYards": 159,
+					"passYards": 240
+				}
+			]
+		},
+		{
+			"seed": 503055,
+			"teamIds": [19, 10],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 35,
+					"completions": 20,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 28,
+					"rushYards": 140,
+					"passYards": 147
+				},
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 35,
+					"completions": 20,
+					"sacks": 1,
+					"interceptions": 3,
+					"rushes": 31,
+					"rushYards": 138,
+					"passYards": 173
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 24,
+					"throws": 33,
+					"completions": 19,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 30,
+					"rushYards": 112,
+					"passYards": 247
+				},
+				{
+					"teamGames": 1,
+					"points": 23,
+					"throws": 46,
+					"completions": 30,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 15,
+					"rushYards": 76,
+					"passYards": 301
+				}
+			]
+		},
+		{
+			"seed": 503056,
+			"teamIds": [11, 18],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 12,
+					"throws": 38,
+					"completions": 22,
+					"sacks": 2,
+					"interceptions": 3,
+					"rushes": 28,
+					"rushYards": 122,
+					"passYards": 207
+				},
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 35,
+					"completions": 18,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 18,
+					"rushYards": 106,
+					"passYards": 180
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 31,
+					"completions": 11,
+					"sacks": 1,
+					"interceptions": 3,
+					"rushes": 16,
+					"rushYards": 74,
+					"passYards": 102
+				},
+				{
+					"teamGames": 1,
+					"points": 21,
+					"throws": 34,
+					"completions": 24,
+					"sacks": 4,
+					"interceptions": 1,
+					"rushes": 39,
+					"rushYards": 125,
+					"passYards": 274
+				}
+			]
+		},
+		{
+			"seed": 503057,
+			"teamIds": [18, 11],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 30,
+					"completions": 17,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 22,
+					"rushYards": 100,
+					"passYards": 297
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 31,
+					"completions": 16,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 28,
+					"rushYards": 125,
+					"passYards": 129
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 39,
+					"completions": 20,
+					"sacks": 3,
+					"interceptions": 1,
+					"rushes": 21,
+					"rushYards": 102,
+					"passYards": 211
+				},
+				{
+					"teamGames": 1,
+					"points": 23,
+					"throws": 30,
+					"completions": 16,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 34,
+					"rushYards": 145,
+					"passYards": 172
+				}
+			]
+		},
+		{
+			"seed": 503058,
+			"teamIds": [12, 17],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 34,
+					"throws": 33,
+					"completions": 24,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 20,
+					"rushYards": 84,
+					"passYards": 327
+				},
+				{
+					"teamGames": 1,
+					"points": 13,
+					"throws": 35,
+					"completions": 12,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 33,
+					"rushYards": 138,
+					"passYards": 115
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 13,
+					"throws": 34,
+					"completions": 18,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 25,
+					"rushYards": 120,
+					"passYards": 214
+				},
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 33,
+					"completions": 21,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 26,
+					"rushYards": 111,
+					"passYards": 247
+				}
+			]
+		},
+		{
+			"seed": 503059,
+			"teamIds": [17, 12],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 26,
+					"completions": 12,
+					"sacks": 1,
+					"interceptions": 1,
+					"rushes": 29,
+					"rushYards": 136,
+					"passYards": 134
+				},
+				{
+					"teamGames": 1,
+					"points": 43,
+					"throws": 29,
+					"completions": 20,
+					"sacks": 1,
+					"interceptions": 2,
+					"rushes": 38,
+					"rushYards": 191,
+					"passYards": 276
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 13,
+					"throws": 33,
+					"completions": 25,
+					"sacks": 2,
+					"interceptions": 1,
+					"rushes": 27,
+					"rushYards": 95,
+					"passYards": 294
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 28,
+					"completions": 20,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 27,
+					"rushYards": 106,
+					"passYards": 186
+				}
+			]
+		},
+		{
+			"seed": 503060,
+			"teamIds": [13, 16],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 35,
+					"throws": 31,
+					"completions": 26,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 20,
+					"rushYards": 74,
+					"passYards": 375
+				},
+				{
+					"teamGames": 1,
+					"points": 28,
+					"throws": 37,
+					"completions": 23,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 24,
+					"rushYards": 122,
+					"passYards": 203
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 35,
+					"completions": 19,
+					"sacks": 1,
+					"interceptions": 2,
+					"rushes": 13,
+					"rushYards": 48,
+					"passYards": 191
+				},
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 36,
+					"completions": 25,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 31,
+					"rushYards": 125,
+					"passYards": 285
+				}
+			]
+		},
+		{
+			"seed": 503061,
+			"teamIds": [16, 13],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 7,
+					"throws": 37,
+					"completions": 17,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 17,
+					"rushYards": 51,
+					"passYards": 137
+				},
+				{
+					"teamGames": 1,
+					"points": 38,
+					"throws": 36,
+					"completions": 25,
+					"sacks": 1,
+					"interceptions": 0,
+					"rushes": 36,
+					"rushYards": 162,
+					"passYards": 230
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 25,
+					"completions": 12,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 33,
+					"rushYards": 216,
+					"passYards": 116
+				},
+				{
+					"teamGames": 1,
+					"points": 20,
+					"throws": 36,
+					"completions": 28,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 25,
+					"rushYards": 104,
+					"passYards": 295
+				}
+			]
+		},
+		{
+			"seed": 503062,
+			"teamIds": [14, 15],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 16,
+					"throws": 31,
+					"completions": 20,
+					"sacks": 0,
+					"interceptions": 0,
+					"rushes": 21,
+					"rushYards": 94,
+					"passYards": 205
+				},
+				{
+					"teamGames": 1,
+					"points": 38,
+					"throws": 32,
+					"completions": 20,
+					"sacks": 3,
+					"interceptions": 0,
+					"rushes": 27,
+					"rushYards": 162,
+					"passYards": 330
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 38,
+					"completions": 18,
+					"sacks": 0,
+					"interceptions": 2,
+					"rushes": 13,
+					"rushYards": 42,
+					"passYards": 262
+				},
+				{
+					"teamGames": 1,
+					"points": 31,
+					"throws": 38,
+					"completions": 25,
+					"sacks": 0,
+					"interceptions": 1,
+					"rushes": 38,
+					"rushYards": 165,
+					"passYards": 295
+				}
+			]
+		},
+		{
+			"seed": 503063,
+			"teamIds": [15, 14],
+			"controlled": 1,
+			"automatic": [
+				{
+					"teamGames": 1,
+					"points": 26,
+					"throws": 36,
+					"completions": 23,
+					"sacks": 4,
+					"interceptions": 0,
+					"rushes": 30,
+					"rushYards": 119,
+					"passYards": 252
+				},
+				{
+					"teamGames": 1,
+					"points": 10,
+					"throws": 46,
+					"completions": 20,
+					"sacks": 3,
+					"interceptions": 3,
+					"rushes": 15,
+					"rushYards": 47,
+					"passYards": 247
+				}
+			],
+			"tactical": [
+				{
+					"teamGames": 1,
+					"points": 36,
+					"throws": 21,
+					"completions": 16,
+					"sacks": 2,
+					"interceptions": 0,
+					"rushes": 25,
+					"rushYards": 159,
+					"passYards": 251
+				},
+				{
+					"teamGames": 1,
+					"points": 6,
+					"throws": 37,
+					"completions": 23,
+					"sacks": 2,
+					"interceptions": 2,
+					"rushes": 30,
+					"rushYards": 143,
+					"passYards": 213
+				}
+			]
+		}
+	],
+	"metadataAnnotation": {
+		"updatedAt": "2026-10-17T21:28:45.144448+00:00",
+		"reason": "Added methodology caveats after independent review. Simulation rows, numerical summaries, original run timestamp, and executed-source hashes remain unchanged.",
+		"simulationRowsSha256": "1ebfc752dc51e0d7bbc2b52261987034fb72830e9d0d08dfbeadfb4283fc9d8a",
+		"annotatedHarnessSha256": "6f0c84755675d05beac7f71d9d114bd50ee39376800c7ddd97d1ad2c7c0fa6c7"
+	}
+}
